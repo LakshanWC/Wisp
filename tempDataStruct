@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 2,
+  "lastUpdated": "2026-10-06T00:00:00Z",
+  "supportedLanguage": ["en"],
+
+  "freeVersion": {
+    "latestVersion": {
+      "firefox": "3.0.0",
+      "chrome": "3.0.0",
+      "edge": "3.0.0"
+    },
+    "minSupportedVersion": "2.5.0",
+    "downloadUrls": {
+      "firefox": "https://example.com/",
+      "chrome": "https://example.com/",
+      "edge": "https://example.com",
+      "default": "https://example.com/download"
+    }
+  },
+
+  "upcomingVersions": [
+    {
+      "id": "free-3.1.0",
+      "product": "free",
+      "version": "3.1.0",
+      "status": "announced",
+      "browserStatus": {
+        "firefox": "announced",
+        "chrome": "announced",
+        "edge": "announced"
+      },
+      "announcedOn": "2026-10-06",
+      "expectedDate": "2026-10-20",
+      "dateIsEstimate": true,
+      "importance": "minor",
+      "message": { "en": "3.1.0 is coming soon!" },
+      "highlights": [
+        { "appliesTo": ["free", "paid"], "text": { "en": "Import/export settings" } }
+      ],
+      "link": null
+    }
+  ],
+
+  "changelog": [
+    {
+      "releases": { "free": "3.0.0" },
+      "date": "2026-10-06",
+      "importance": "major",
+      "showWhatsNew": true,
+      "notes": [
+        { "type": "new", "appliesTo": ["free", "paid"], "text": { "en": "Added dark mode" } },
+        { "type": "fixed", "appliesTo": ["free", "paid"], "text": { "en": "Fixed crash on startup" } },
+        { "type": "improved", "appliesTo": ["free", "paid"], "text": { "en": "Faster loading" } }
+      ],
+      "link": null
+    }
+  ],
+
+  "paidVersion": {
+    "status": "coming-soon",
+    "available": false,
+    "name": "Wisp-Pro",
+    "announcement": { "en": "Coming soon!" },
+    "expectedDate": "2026-11-15",
+    "dateIsEstimate": true,
+    "waitlistUrl": null,
+    "latestVersion": {
+      "firefox": null,
+      "chrome": null,
+      "edge": null
+    },
+    "minSupportedVersion": null,
+    "price": {
+      "amount": 4.99,
+      "currency": "USD",
+      "model": "one-time",
+      "note": null
+    },
+    "features": [
+      {
+        "id": "webpage-archiving",
+        "name": { "en": "WebPage-Archiving" },
+        "description": { "en": "Archive any webpage on your device" },
+        "status": "planned",
+        "expectedDate": null
+      }
+    ],
+    "links": {
+      "firefox": { "url": "https://example.com/firefox", "title": { "en": "Get it on Firefox" } },
+      "chrome": { "url": "https://example.com/chrome", "title": { "en": "Get it on Chrome" } },
+      "edge": { "url": "https://example.com/edge", "title": { "en": "Get it on Edge" } },
+      "default": { "url": "https://example.com/pro", "title": { "en": "Get Pro" } }
+    }
+  },
+
+  "promotions": [
+    {
+      "id": "launch-sale",
+      "enabled": false,
+      "title": { "en": "Launch sale" },
+      "message": { "en": "30% off for the first week" },
+      "code": "LAUNCH30",
+      "startDate": "2026-11-15",
+      "endDate": "2026-11-22",
+      "link": null
+    }
+  ],
+
+  "statusBanner": {
+    "active": false,
+    "level": "warning",
+    "message": { "en": "" },
+    "link": null
+  },
+
+  "notifications": [
+    {
+      "id": "welcome-2026-10",
+      "enabled": true,
+      "type": "info",
+      "priority": 1,
+      "title": { "en": "Thanks for installing!" },
+      "message": { "en": "Check out what's new in 3.0.0." },
+      "startDate": "2026-10-06",
+      "endDate": "2026-11-06",
+      "dismissible": true,
+      "showOnce": false,
+      "placement": ["popup"],
+      "targeting": {
+        "products": [],
+        "minVersion": null,
+        "maxVersion": "2.9.9",
+        "browsers": [],
+        "languages": [],
+        "rolloutPercent": 100
+      },
+      "link": { "url": "https://example.com", "label": { "en": "Learn more" } }
+    }
+  ],
+
+  "deprecations": [
+    {
+      "id": "old-versions-eol",
+      "enabled": false,
+      "products": ["free"],
+      "appliesToVersionsBelow": "2.0.0",
+      "endOfLifeDate": "2026-12-01",
+      "message": { "en": "Versions below 2.0 will stop working on Dec 1." },
+      "link": null
+    }
+  ],
+
+  "featureFlags": {
+    "showPaidBanner": true,
+    "showUpcomingBanner": true,
+    "showChangelogButton": true,
+    "enableExperimentalFeature": false
+  },
+
+  "remoteValues": {
+    "exampleNumber": 10,
+    "exampleText": "anything you want to change without updating the extension"
+  },
+
+  "links": {
+    "website": "https://example.com",
+    "support": "https://example.com/support",
+    "privacyPolicy": "https://example.com/privacy",
+    "changelog": "https://example.com/changelog",
+    "feedback": "https://example.com/feedback",
+    "donate": null,
+    "social": {
+      "github": null,
+      "twitter": null,
+      "discord": null
+    }
+  },
+
+  "extra": {}
+}
