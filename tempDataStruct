@@ -20,22 +20,22 @@
 
   "upcomingVersions": [
     {
-      "id": "free-3.1.0",
-      "product": "free",
-      "version": "3.1.0",
-      "status": "announced",
+      "id": "null",
+      "product": "null",
+      "version": "null",
+      "status": "null",
       "browserStatus": {
-        "firefox": "announced",
-        "chrome": "announced",
-        "edge": "announced"
+        "firefox": "null",
+        "chrome": "null",
+        "edge": "null"
       },
-      "announcedOn": "2026-10-06",
-      "expectedDate": "2026-10-20",
-      "dateIsEstimate": true,
-      "importance": "minor",
-      "message": { "en": "3.1.0 is coming soon!" },
+      "announcedOn": "null",
+      "expectedDate": "null",
+      "dateIsEstimate": false,
+      "importance": "null",
+      "message": { "en": "null" },
       "highlights": [
-        { "appliesTo": ["free", "paid"], "text": { "en": "Import/export settings" } }
+        { "appliesTo": ["free", "paid"], "text": { "en": "null" } }
       ],
       "link": null
     }
@@ -61,8 +61,8 @@
     "available": false,
     "name": "Wisp-Pro",
     "announcement": { "en": "Coming soon!" },
-    "expectedDate": "2026-11-15",
-    "dateIsEstimate": true,
+    "expectedDate": "Coming soon!",
+    "dateIsEstimate": false,
     "waitlistUrl": null,
     "latestVersion": {
       "firefox": null,
@@ -95,20 +95,20 @@
 
   "promotions": [
     {
-      "id": "launch-sale",
+      "id": "null",
       "enabled": false,
-      "title": { "en": "Launch sale" },
-      "message": { "en": "30% off for the first week" },
-      "code": "LAUNCH30",
-      "startDate": "2026-11-15",
-      "endDate": "2026-11-22",
+      "title": { "en": "null" },
+      "message": { "en": "null" },
+      "code": "null",
+      "startDate": "null",
+      "endDate": "null",
       "link": null
     }
   ],
 
   "statusBanner": {
     "active": false,
-    "level": "warning",
+    "level": "null",
     "message": { "en": "" },
     "link": null
   },
@@ -120,7 +120,7 @@
       "type": "info",
       "priority": 1,
       "title": { "en": "Thanks for installing!" },
-      "message": { "en": "Check out what's new in 3.0.0." },
+      "message": { "en": "Check out what's new in" },
       "startDate": "2026-10-06",
       "endDate": "2026-11-06",
       "dismissible": true,
@@ -143,9 +143,9 @@
       "id": "old-versions-eol",
       "enabled": false,
       "products": ["free"],
-      "appliesToVersionsBelow": "2.0.0",
-      "endOfLifeDate": "2026-12-01",
-      "message": { "en": "Versions below 2.0 will stop working on Dec 1." },
+      "appliesToVersionsBelow": "null",
+      "endOfLifeDate": "null",
+      "message": { "en": "null" },
       "link": null
     }
   ],
@@ -159,7 +159,7 @@
 
   "remoteValues": {
     "exampleNumber": 10,
-    "exampleText": "anything you want to change without updating the extension"
+    "exampleText": "null"
   },
 
   "links": {
