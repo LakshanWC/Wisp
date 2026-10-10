@@ -48,9 +48,9 @@
       "importance": "major",
       "showWhatsNew": true,
       "notes": [
-        { "type": "new", "appliesTo": ["free", "paid"], "text": { "en": "Added dark mode" } },
-        { "type": "fixed", "appliesTo": ["free", "paid"], "text": { "en": "Fixed crash on startup" } },
-        { "type": "improved", "appliesTo": ["free", "paid"], "text": { "en": "Faster loading" } }
+        { "type": "null", "appliesTo": ["free", "paid"], "text": { "en": "null" } },
+        { "type": "null", "appliesTo": ["free", "paid"], "text": { "en": "null" } },
+        { "type": "null", "appliesTo": ["free", "paid"], "text": { "en": "null" } }
       ],
       "link": null
     }
@@ -60,7 +60,7 @@
     "status": "null",
     "available": false,
     "name": "null",
-    "announcement": { "en": "Coming soon!" },
+    "announcement": { "en": "null" },
     "expectedDate": "null",
     "dateIsEstimate": false,
     "waitlistUrl": null,
@@ -71,17 +71,17 @@
     },
     "minSupportedVersion": null,
     "price": {
-      "amount": 4.99,
-      "currency": "USD",
-      "model": "one-time",
+      "amount": null,
+      "currency": "null",
+      "model": "null",
       "note": null
     },
     "features": [
       {
-        "id": "webpage-archiving",
-        "name": { "en": "WebPage-Archiving" },
-        "description": { "en": "Archive any webpage on your device" },
-        "status": "planned",
+        "id": "null",
+        "name": { "en": "null" },
+        "description": { "en": "null" },
+        "status": "null",
         "expectedDate": null
       }
     ],
