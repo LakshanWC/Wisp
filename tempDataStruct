@@ -57,11 +57,11 @@
   ],
 
   "paidVersion": {
-    "status": "coming-soon",
+    "status": "null",
     "available": false,
-    "name": "Wisp-Pro",
+    "name": "null",
     "announcement": { "en": "Coming soon!" },
-    "expectedDate": "Coming soon!",
+    "expectedDate": "null",
     "dateIsEstimate": false,
     "waitlistUrl": null,
     "latestVersion": {
