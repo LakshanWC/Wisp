@@ -6,8 +6,7 @@ export function getUpdateDetails(){
    return fetchUpdateDetails();
 }
 
-const DETAILS_URL =
-  "https://raw.githubusercontent.com/LakshanWC/Wisp/tempBranch/tempDataStruct";
+const DETAILS_URL = "https://raw.githubusercontent.com/LakshanWC/Wisp/main/config";
 
 const SUPPORTED_SCHEMA = 2;
 const CACHE_KEY = "wisp_release_info";
