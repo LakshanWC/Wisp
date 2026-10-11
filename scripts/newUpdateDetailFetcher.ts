@@ -6,7 +6,7 @@ export function getUpdateDetails(){
    return fetchUpdateDetails();
 }
 
-const DETAILS_URL = "https://raw.githubusercontent.com/LakshanWC/Wisp/main/config";
+const DETAILS_URL = AppUrls.RELEASE_JSON_URL;
 
 const SUPPORTED_SCHEMA = 2;
 const CACHE_KEY = "wisp_release_info";
