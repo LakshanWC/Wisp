@@ -1,0 +1,27 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #09090b;
+}
+
+.category-pill-group:hover .rename-btn {
+  opacity: 1;
+  color: #71717a;
+}
+
+.category-pill-group:hover .rename-btn:hover {
+  color: #a78bfa;
+}
+
+@keyframes wisp-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes wisp-flicker {
+  0%   { opacity: 0.75; filter: brightness(0.95); }
+  25%  { opacity: 1;    filter: brightness(1.08); }
+  50%  { opacity: 0.85; filter: brightness(1);    }
+  75%  { opacity: 1;    filter: brightness(1.05); }
+  100% { opacity: 0.75; filter: brightness(0.95); }
+}

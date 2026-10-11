@@ -1,0 +1,218 @@
+/* styles/themes.css */
+:root {
+  /* YoRHa theme (default) - based on the bone/chassis aesthetic */
+  --bg-primary: #e8e4d8;
+  --bg-secondary: #ddd8c8;
+  --bg-card: #e8e4d8;
+  --bg-hover: #d5d0c0;
+  --bg-input: #e8e4d8;
+  --bg-pill: #e8e4d8;
+  --bg-pill-active: rgba(163,116,47,0.12);
+  --bg-gradient-card: linear-gradient(135deg, #e8e4d8 0%, #ddd8c8 100%);
+  
+  --border-primary: #0f0f0e;
+  --border-secondary: #8a8578;
+  --border-accent: #a3742f;
+  --border-active: #0f0f0e;
+  --border-hover: #8a8578;
+  
+  --text-primary: #0f0f0e;
+  --text-secondary: #161511;
+  --text-muted: #8a8578;
+  --text-dim: #8a8578;
+  --text-dimmer: #a8a396;
+  --text-dimmest: #c5c0b4;
+  
+  --accent-primary: #a3742f;
+  --accent-secondary: #b8341f;
+  --accent-dark: #4a5d4f;
+  --accent-bg: rgba(163,116,47,0.08);
+  --accent-bg-strong: rgba(163,116,47,0.15);
+  --accent-bg-light: rgba(163,116,47,0.04);
+  
+  --shadow-color: rgba(22,21,17,0.15);
+  --shadow-light: rgba(22,21,17,0.08);
+  --shadow-card: 4px 4px 0 rgba(22,21,17,0.08);
+  --shadow-hover: 4px 4px 0 rgba(22,21,17,0.15);
+  
+  --gradient-header: radial-gradient(ellipse at top, rgba(22,21,17,0.05) 0%, transparent 60%);
+  --gradient-accent: linear-gradient(180deg, #a3742f 0%, #8a6b25 60%, #6b5220 100%);
+  --gradient-icon-bg: linear-gradient(135deg, #ddd8c8 0%, #c5c0b4 100%);
+  
+  --scrollbar-track: #ddd8c8;
+  --scrollbar-thumb: #8a8578;
+  
+  --modal-backdrop: rgba(22,21,17,0.3);
+  --modal-bg: #e8e4d8;
+  
+  --status-ok: #4a5d4f;
+  --status-broken: #b8341f;
+  --status-unverifiable: #a3742f;
+  --status-duplicate: #a3742f;
+}
+
+/* Dark variant - keeping the YoRHa aesthetic but darker */
+[data-theme="dark"] {
+  --bg-primary: #1a1915;
+  --bg-secondary: #22211c;
+  --bg-card: #1a1915;
+  --bg-hover: #2a2924;
+  --bg-input: #1a1915;
+  --bg-pill: #1a1915;
+  --bg-pill-active: rgba(163,116,47,0.2);
+  --bg-gradient-card: linear-gradient(135deg, #1a1915 0%, #22211c 100%);
+  
+  --border-primary: #3a3833;
+  --border-secondary: #4a4842;
+  --border-accent: #a3742f;
+  --border-active: #e8e4d8;
+  --border-hover: #8a8578;
+  
+  --text-primary: #e8e4d8;
+  --text-secondary: #ddd8c8;
+  --text-muted: #8a8578;
+  --text-dim: #a8a396;
+  --text-dimmer: #6a6660;
+  --text-dimmest: #4a4842;
+  
+  --accent-primary: #c4a04a;
+  --accent-secondary: #b8341f;
+  --accent-dark: #4a5d4f;
+  --accent-bg: rgba(163,116,47,0.12);
+  --accent-bg-strong: rgba(163,116,47,0.2);
+  --accent-bg-light: rgba(163,116,47,0.06);
+  
+  --shadow-color: rgba(0,0,0,0.5);
+  --shadow-light: rgba(0,0,0,0.3);
+  --shadow-card: 4px 4px 0 rgba(0,0,0,0.3);
+  --shadow-hover: 4px 4px 0 rgba(0,0,0,0.5);
+  
+  --gradient-header: radial-gradient(ellipse at top, rgba(232,228,216,0.05) 0%, transparent 60%);
+  --gradient-accent: linear-gradient(180deg, #c4a04a 0%, #a3742f 60%, #8a6b25 100%);
+  --gradient-icon-bg: linear-gradient(135deg, #22211c 0%, #2a2924 100%);
+  
+  --scrollbar-track: #1a1915;
+  --scrollbar-thumb: #3a3833;
+  
+  --modal-backdrop: rgba(0,0,0,0.7);
+  --modal-bg: #1a1915;
+  
+  --status-ok: #6a8a6f;
+  --status-broken: #d44a3a;
+  --status-unverifiable: #c4a04a;
+  --status-duplicate: #c4a04a;
+}
+
+/* Light variant - a cleaner version of YoRHa */
+[data-theme="light"] {
+  --bg-primary: #f5f2eb;
+  --bg-secondary: #edeae0;
+  --bg-card: #f5f2eb;
+  --bg-hover: #e8e4d8;
+  --bg-input: #f5f2eb;
+  --bg-pill: #f5f2eb;
+  --bg-pill-active: rgba(163,116,47,0.08);
+  --bg-gradient-card: linear-gradient(135deg, #f5f2eb 0%, #edeae0 100%);
+  
+  --border-primary: #d5d0c4;
+  --border-secondary: #c5c0b4;
+  --border-accent: #a3742f;
+  --border-active: #0f0f0e;
+  --border-hover: #8a8578;
+  
+  --text-primary: #0f0f0e;
+  --text-secondary: #161511;
+  --text-muted: #8a8578;
+  --text-dim: #a8a396;
+  --text-dimmer: #c5c0b4;
+  --text-dimmest: #d5d0c4;
+  
+  --accent-primary: #a3742f;
+  --accent-secondary: #8a6b25;
+  --accent-dark: #4a5d4f;
+  --accent-bg: rgba(163,116,47,0.06);
+  --accent-bg-strong: rgba(163,116,47,0.1);
+  --accent-bg-light: rgba(163,116,47,0.03);
+  
+  --shadow-color: rgba(22,21,17,0.08);
+  --shadow-light: rgba(22,21,17,0.04);
+  --shadow-card: 2px 2px 0 rgba(22,21,17,0.05);
+  --shadow-hover: 2px 2px 0 rgba(22,21,17,0.1);
+  
+  --gradient-header: radial-gradient(ellipse at top, rgba(22,21,17,0.03) 0%, transparent 60%);
+  --gradient-accent: linear-gradient(180deg, #a3742f 0%, #8a6b25 60%, #6b5220 100%);
+  --gradient-icon-bg: linear-gradient(135deg, #edeae0 0%, #d5d0c4 100%);
+  
+  --scrollbar-track: #edeae0;
+  --scrollbar-thumb: #c5c0b4;
+  
+  --modal-backdrop: rgba(22,21,17,0.2);
+  --modal-bg: #f5f2eb;
+  
+  --status-ok: #4a5d4f;
+  --status-broken: #b8341f;
+  --status-unverifiable: #a3742f;
+  --status-duplicate: #a3742f;
+}
+
+/* High contrast variant - based on high contrast dark but with YoRHa accents */
+[data-theme="high-contrast-dark"] {
+  --bg-primary: #0a0a09;
+  --bg-secondary: #141411;
+  --bg-card: #0a0a09;
+  --bg-hover: #1e1d19;
+  --bg-input: #0a0a09;
+  --bg-pill: #0a0a09;
+  --bg-pill-active: rgba(163,116,47,0.25);
+  --bg-gradient-card: linear-gradient(135deg, #0a0a09 0%, #141411 100%);
+  
+  --border-primary: #3a3833;
+  --border-secondary: #4a4842;
+  --border-accent: #c4a04a;
+  --border-active: #e8e4d8;
+  --border-hover: #5a5852;
+  
+  --text-primary: #f5f2eb;
+  --text-secondary: #e8e4d8;
+  --text-muted: #ddd8c8;
+  --text-dim: #c5c0b4;
+  --text-dimmer: #a8a396;
+  --text-dimmest: #8a8578;
+  
+  --accent-primary: #d4b04a;
+  --accent-secondary: #b8341f;
+  --accent-dark: #4a5d4f;
+  --accent-bg: rgba(163,116,47,0.2);
+  --accent-bg-strong: rgba(163,116,47,0.3);
+  --accent-bg-light: rgba(163,116,47,0.1);
+  
+  --shadow-color: rgba(0,0,0,0.8);
+  --shadow-light: rgba(0,0,0,0.5);
+  --shadow-card: 4px 4px 0 rgba(0,0,0,0.5);
+  --shadow-hover: 4px 4px 0 rgba(0,0,0,0.7);
+  
+  --gradient-header: radial-gradient(ellipse at top, rgba(232,228,216,0.08) 0%, transparent 60%);
+  --gradient-accent: linear-gradient(180deg, #d4b04a 0%, #a3742f 60%, #8a6b25 100%);
+  --gradient-icon-bg: linear-gradient(135deg, #141411 0%, #1e1d19 100%);
+  
+  --scrollbar-track: #0a0a09;
+  --scrollbar-thumb: #3a3833;
+  
+  --modal-backdrop: rgba(0,0,0,0.9);
+  --modal-bg: #0a0a09;
+  
+  --status-ok: #6a8a6f;
+  --status-broken: #d44a3a;
+  --status-unverifiable: #d4b04a;
+  --status-duplicate: #d4b04a;
+}
+
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease !important;
+}

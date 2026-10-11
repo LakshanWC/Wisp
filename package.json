@@ -1,0 +1,51 @@
+{
+  "name": "Wisp",
+  "displayName": "Wisp",
+  "version": "1.0.0",
+  "description": "Organize and search your bookmarks, check for dead links, and keep private ones safe in an encrypted vault.",
+  "author": "Lamp Moth",
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "package": "plasmo package"
+  },
+  "dependencies": {
+    "framer-motion": "^12.42.2",
+    "ml-kmeans": "^7.0.1",
+    "motion": "^12.42.2",
+    "plasmo": "0.90.5",
+    "qrcode": "^1.5.4",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "web-vitals": "^5.3.0"
+  },
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "4.1.1",
+    "@types/chrome": "0.0.258",
+    "@types/node": "20.11.5",
+    "@types/react": "18.2.48",
+    "@types/react-dom": "18.2.18",
+    "crypto-browserify": "^3.12.1",
+    "prettier": "3.2.4",
+    "typescript": "5.3.3"
+  },
+  "manifest": {
+    "host_permissions": [
+      "http://*/*",
+      "https://*/*"
+    ],
+    "permissions": [
+      "bookmarks",
+      "storage",
+      "unlimitedStorage",
+      "alarms"
+    ],
+    "incognito": "split",
+    "browser_specific_settings": {
+      "gecko": {
+        "id": "wisp@lampmoth.extension",
+        "strict_min_version": "109.0"
+      }
+    }
+  }
+}
