@@ -1,4 +1,5 @@
 import { AppUrls } from "./appUrls"
+import browserApi from "./storage";
 
 
 
@@ -6,7 +7,7 @@ export function getUpdateDetails(){
    return fetchUpdateDetails();
 }
 
-const DETAILS_URL = "https://raw.githubusercontent.com/LakshanWC/Wisp/main/config";
+const DETAILS_URL = AppUrls.RELEASE_JSON_URL;
 
 const SUPPORTED_SCHEMA = 2;
 const CACHE_KEY = "wisp_release_info";
@@ -24,13 +25,13 @@ async function fetchUpdateDetails() {
     }
 
     // save for next time
-    await chrome.storage.local.set({
+    await browserApi.storage.local.set({
       [CACHE_KEY]: { data, fetchedAt: Date.now() }
     });
     return data;
   } catch (err) {
     console.warn("Could not fetch update details, using cache:", err);
-    const cached = await chrome.storage.local.get(CACHE_KEY);
+    const cached = await browserApi.storage.local.get(CACHE_KEY);
     return cached[CACHE_KEY]?.data ?? null;   // null if nothing cached yet
   }
 }
