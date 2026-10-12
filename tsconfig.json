@@ -9,11 +9,11 @@
     "./**/*.tsx"
   ],
   "compilerOptions": {
+    "moduleResolution": "bundler",
     "paths": {
       "~*": [
         "./*"
       ]
-    },
-    "baseUrl": "."
+    }
   }
 }
