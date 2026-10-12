@@ -137,4 +137,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Summary
 
 Wisp is a feature-focused browser extension designed to make bookmark management easier, safer, and more useful. Whether you want to clean up duplicates, monitor dead links, or protect private bookmarks, Wisp is built to help streamline the process.
-```
