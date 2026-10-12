@@ -115,11 +115,7 @@ These permissions support bookmark management, persistence, and extension-level 
 
 ## Screenshots
 
-Add screenshots here to show:
-- bookmark dashboard
-- duplicate detection
-- private vault view
-- options/settings page
+
 
 ## Contributing
 
