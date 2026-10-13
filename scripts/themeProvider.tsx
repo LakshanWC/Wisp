@@ -1,13 +1,81 @@
 // scripts/themeProvider.tsx
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import browserApi from './storage'
 import type { StorageChanges } from './storage'
 
 export type Theme = 'dark' | 'light' | 'high-contrast-dark'
 
-const ThemeContext = createContext(null as any)
+// ── Color palettes ───────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'recall_theme'
+export type Colors = {
+  bg: string
+  bgPanel: string      
+  ink: string
+  dim: string
+  dimmer: string
+  line: string
+  lineFaint: string
+  amber: string
+  sage: string
+  rust: string 
+  mono: string
+}
+
+const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
+
+const PALETTES: Record<Theme, Colors> = {
+  dark: {
+    bg: '#16150f',
+    bgPanel: '#1e1c16',
+    ink: '#e8e4d8',
+    dim: '#8a8577',
+    dimmer: '#5a5548',
+    line: '#2a2820',
+    lineFaint: '#1e1c16',
+    amber: '#c8a03c',
+    sage: '#4a5d4f',
+    rust: '#b8341f', 
+    mono: MONO,
+  },
+  light: {
+    bg: '#e8e4d8',
+    bgPanel: '#ddd8c8',
+    ink: '#161511',
+    dim: '#8a8578',
+    dimmer: '#a8a396',
+    line: '#161511',
+    lineFaint: 'rgba(22,21,17,0.18)',
+    amber: '#a3742f',
+    sage: '#4a5d4f',
+    rust: '#b8341f',
+    mono: MONO,
+  },
+  'high-contrast-dark': {
+    bg: '#000000',
+    bgPanel: '#111111',
+    ink: '#ffffff',
+    dim: '#c8c4b8',
+    dimmer: '#8a8577',
+    line: '#3a3830',
+    lineFaint: '#1e1c16',
+    amber: '#ffd166',
+    sage: '#7bc47f',
+    rust: '#ff5544',
+    mono: MONO,
+  },
+}
+
+// ── Context ──────────────────────────────────────────────────────────────────
+type ThemeContextValue = {
+  theme: Theme
+  colors: Colors
+  toggleTheme: () => void
+  setTheme: (t: Theme) => void
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null)
+
+const STORAGE_KEY = 'wisp_theme'
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const [theme, setTheme] = useState<Theme>('dark')
@@ -94,20 +162,27 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
     })
   }, [])
 
+  // ✦ Derive colors from the active theme. Falls back to dark if unknown.
+  const colors = useMemo<Colors>(() => PALETTES[theme] ?? PALETTES.dark, [theme])
+
+  // ✦ Memoize the context value so consumers don't re-render on every parent tick.
+  const value = useMemo<ThemeContextValue>(() => ({
+    theme,
+    colors,
+    toggleTheme,
+    setTheme: setThemeDirectly,
+  }), [theme, colors, toggleTheme, setThemeDirectly])
+
   if (!mounted) return null
 
   return (
-    <ThemeContext.Provider value={{
-      theme,
-      toggleTheme,
-      setTheme: setThemeDirectly
-    }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   )
 }
 
-export const useTheme = () => {
+export const useTheme = (): ThemeContextValue => {
   const context = useContext(ThemeContext)
   if (!context) throw new Error('useTheme must be used within ThemeProvider')
   return context

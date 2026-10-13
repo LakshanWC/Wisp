@@ -266,7 +266,7 @@ function FullViewContent() {
 
   //#region ─── Hooks & state ─────────────────────────────────────────────────
   const logic = useFullViewLogic()
-  const { theme } = useTheme()   // only used for modal/panel props
+  const { theme , colors} = useTheme()
   const [showSystemModal, setShowSystemModal] = useState(false)
   const [showUpdatesModal, setShowUpdatesModal] = useState(false)
   const [hasNews, setHasNews] = useState(false)
@@ -506,6 +506,7 @@ function FullViewContent() {
           onLock={logic.handlePrivateLock}
           isUnlocked={logic.isPrivateUnlocked}
           theme={theme}
+          colors={colors}
           onNotify={showBanner}
         />
       )
@@ -1251,6 +1252,7 @@ function FullViewContent() {
               isOpen={showSystemModal}
               onClose={() => setShowSystemModal(false)}
               theme={theme}
+              colors={colors}
             />
           )}
         </AnimatePresence>
@@ -1262,6 +1264,7 @@ function FullViewContent() {
               isOpen={showUpdatesModal}
               onClose={() => setShowUpdatesModal(false)}
               theme={theme}
+              colors={colors}
             />
           )}
         </AnimatePresence>
