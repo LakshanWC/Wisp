@@ -1,5 +1,6 @@
 // FullView.tsx
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
+//#region ─── Imports ──────────────────────────────────────────────────────────
+import React, { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue } from "react"
 import type { KeyboardEvent } from "react"
 import { useFullViewLogic, FORGOTTEN_OPTIONS, PILLS_PREVIEW, groupModeLabel, healthRefreshMessage, exportMenuItemStyle, pillStyle, getCategoryIcon } from "./scripts/FullViewLogic"
 import CollapsibleCategory from "./components/CollapsibleCategory"
@@ -14,7 +15,7 @@ import TimelineView from "./components/TimelineView"
 import { relativeTime } from "./scripts/bookmarkVisits"
 import { statusDot } from "./scripts/bookmarkHealth"
 import { type VisitStore } from "./scripts/bookmarkVisits"
-import{ type HealthStore,HealthStatus } from "./scripts/bookmarkHealth"
+import { type HealthStore, HealthStatus } from "./scripts/bookmarkHealth"
 import { loadFavicon } from "~scripts/faviconHelper"
 import { motion, AnimatePresence } from "framer-motion"
 import { estimateClusterCap } from "~scripts/catagorizeHelper"
@@ -26,13 +27,15 @@ import {
   UpdatesPanel,
   peekHasNews,
 } from "~components/wispSystemInfo"
-import NotificationBanner,{ type BannerPayload } from "~components/customNotificationBanner"
+import NotificationBanner, { type BannerPayload } from "~components/customNotificationBanner"
 import WispIntro from "~intro/WispIntro"
+//#endregion
 
-// ─── Intro gate ───────────────────────────────────────────────────────────────
+//#region ─── Intro gate ────────────────────────────────────────────────────────
 const INTRO_KEY = "wisp_intro_seen"
+//#endregion
 
-// ─── YoRHa design tokens ───────────────────────────────────────────────────────
+//#region ─── YoRHa design tokens ───────────────────────────────────────────────
 
 function getThemeColors(theme: string) {
   const isDark = theme === "dark" || theme === "high-contrast-dark"
@@ -52,16 +55,18 @@ function getThemeColors(theme: string) {
   }
 }
 
-function Bracket({ children, style, theme }: { children: React.ReactNode; style?: React.CSSProperties; theme?: string }) {
+// ── FIX: memoize Bracket — it was re-created on every parent render
+const Bracket = React.memo(function Bracket({ children, style, theme }: { children: React.ReactNode; style?: React.CSSProperties; theme?: string }) {
   const colors = getThemeColors(theme || 'light')
   return (
     <span style={{ fontFamily: colors.mono, letterSpacing: "0.08em", ...style }}>
       [ {children} ]
     </span>
   )
-}
+})
+//#endregion
 
-// ─── Memoized sub-components ──────────────────────────────────────────────────
+//#region ─── Memoized sub-components ───────────────────────────────────────────
 
 const HeaderStats = React.memo(function HeaderStats({
   allBookmarks, categories, groupMode,
@@ -84,7 +89,7 @@ const HeaderStats = React.memo(function HeaderStats({
       letterSpacing: "0.03em", transition: "color 0.3s",
     }}>
       <span>
-        
+
         {allBookmarks.length} ENTRIES · {categories.length} {groupModeLabel(groupMode).toUpperCase()}
         {forgottenCount > 0 && (
           <span style={{ color: colors.amber, marginLeft: "10px" }}>· {forgottenCount} DORMANT</span>
@@ -126,7 +131,31 @@ const SkeletonPill = React.memo(function SkeletonPill({
   )
 })
 
-//#region ─── Main Component ──────────────
+const CheckLinksLabel = React.memo(function CheckLinksLabel({
+  isChecking,
+  progress,
+  needsRefresh,
+  color,
+}: {
+  isChecking: boolean
+  progress: { done: number; total: number } | null
+  needsRefresh: boolean
+  color: string
+}) {
+  if (isChecking) {
+    return (
+      <>
+        <SpinnerIcon color={color} />
+        {" CHECKING "}{progress?.done ?? 0}/{(progress?.total ?? 0)}
+      </>
+    )
+  }
+  if (needsRefresh) return <>◎ UPDATE LINK CHECK</>
+  return <>◎ CHECK LINKS</>
+})
+//#endregion
+
+//#region ─── Main Component ───────────────────────────────────────────────────
 
 export default function FullView() {
   return (
@@ -135,6 +164,8 @@ export default function FullView() {
     </ThemeProvider>
   )
 }
+
+//#region ─── Intro gate wrapper ────────────────────────────────────────────────
 
 function FullViewRoot() {
   const [introDone, setIntroDone] = useState<boolean | null>(null)
@@ -159,8 +190,12 @@ function FullViewRoot() {
     ? <FullViewContent />
     : <WispIntro onReady={finishIntro} />
 }
+//#endregion
+
+//#region ─── FullViewContent ───────────────────────────────────────────────────
 
 function FullViewContent() {
+  //#region ─── Hooks & state ─────────────────────────────────────────────────
   const logic = useFullViewLogic()
   const { theme } = useTheme()
   const colors = getThemeColors(theme)
@@ -173,7 +208,20 @@ function FullViewContent() {
   const [showSlashHint, setShowSlashHint] = useState(false)
   const slashHintTimerRef = useRef<number | null>(null)
   const [banner, setBanner] = useState<BannerPayload | null>(null)
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
+  // ── FIX: defer the health store used by the big tree so that in-flight
+  //         health updates don't rebuild every category/card on every tick.
+  const deferredHealth = useDeferredValue(logic.health)
+
+  // ── FIX: precompute a Set of private bookmark IDs (was O(n·m) .some() calls)
+  const privateIds = useMemo(
+    () => new Set(logic.privateBookmarks.map((pb: any) => pb.id)),
+    [logic.privateBookmarks]
+  )
+  //#endregion
+
+  //#region ─── Banner callbacks ──────────────────────────────────────────────
   const showBanner = useCallback((payload: BannerPayload) => {
     setBanner(payload)
   }, [])
@@ -181,8 +229,31 @@ function FullViewContent() {
   const hideBanner = useCallback(() => {
     setBanner(null)
   }, [])
+  //#endregion
 
-  //- Focus search bar +  hint --------------
+  //#region ─── Scroll-to-top tracking + handler ──────────────────────────────
+  useEffect(() => {
+    const onScroll = () => {
+      setShowScrollTop(window.scrollY > 400)
+    }
+    window.addEventListener("scroll", onScroll, { passive: true })
+    onScroll() // sync on mount
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+
+  const scrollToSearch = useCallback(() => {
+    const el = document.getElementById("searchTextBox")
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" })
+      // nudge focus so the user lands ready to type
+      window.setTimeout(() => inputRef.current?.focus(), 400)
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" })
+    }
+  }, [])
+  //#endregion
+
+  //#region ─── Global "/" shortcut + slash hint ──────────────────────────────
   useEffect(() => {
     const flashHint = () => {
       setShowSlashHint(true)
@@ -216,7 +287,7 @@ function FullViewContent() {
         inputRef.current?.focus()
         return
       }
-      // Ignore 
+      // Ignore
       const ignoredKeys = new Set([
         "Shift", "Control", "Alt", "Meta", "CapsLock", "Tab",
         "Escape", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
@@ -233,13 +304,17 @@ function FullViewContent() {
       if (slashHintTimerRef.current) window.clearTimeout(slashHintTimerRef.current)
     }
   }, [])
+  //#endregion
 
-  // Re-check for news whenever the Updates panel closes
+  //#region ─── Updates news peek ─────────────────────────────────────────────
+  // ── FIX: only re-check for news when the Updates panel *closes*,
+  //         not on every state flip (open + close).
   useEffect(() => {
-    peekHasNews().then(setHasNews)
+    if (!showUpdatesModal) peekHasNews().then(setHasNews)
   }, [showUpdatesModal])
+  //#endregion
 
-  // ─── Derived loading state ─────────────────────────────────────────────
+  //#region ─── Derived loading / presence flags ──────────────────────────────
   const isLoading = useMemo(
     () =>
       logic.allBookmarks.length === 0 &&
@@ -253,10 +328,9 @@ function FullViewContent() {
   const hasBroken = useMemo(() => logic.brokenBookmarks.length > 0, [logic.brokenBookmarks.length])
   const hasUnverifiable = useMemo(() => logic.unverifiableBookmarks.length > 0, [logic.unverifiableBookmarks.length])
   const hasDuplicates = useMemo(() => logic.duplicateCount > 0, [logic.duplicateCount])
-    //----- notification banner for vault
-  const [notificationBanner, SetNotificationBanner] = useState(true);
- 
+  //#endregion
 
+  //#region ─── Category pills (with inline rename / delete) ──────────────────
   const CategoryPills = useMemo(() => {
     const categories = logic.pillsExpanded ? logic.categories : logic.categories.slice(0, PILLS_PREVIEW)
     return categories.map(cat => {
@@ -347,13 +421,17 @@ function FullViewContent() {
     logic.setRenameValue, logic.setRenamingCat,
     colors, theme
   ])
+  //#endregion
 
+  //#region ─── Private bookmark filtering ────────────────────────────────────
+  // ── FIX: use the precomputed privateIds Set instead of O(n·m) .some()
   const filterPrivateBookmarks = useCallback((bookmarks: any[]) => {
     if (logic.isPrivateUnlocked) return bookmarks
-    return bookmarks.filter(b => !logic.privateBookmarks.some(pb => pb.id === b.id))
-  }, [logic.isPrivateUnlocked, logic.privateBookmarks])
+    return bookmarks.filter(b => !privateIds.has(b.id))
+  }, [logic.isPrivateUnlocked, privateIds])
+  //#endregion
 
-  // ─── Manual health override handlers ───────────────────────────────────
+  //#region ─── Manual health override handlers ───────────────────────────────
   const handleMarkWorking = useCallback((url: string) => {
     logic.setManualHealth(url, HealthStatus.Live)
   }, [logic.setManualHealth])
@@ -365,9 +443,13 @@ function FullViewContent() {
   const handleDeleteOne = useCallback((id: string) => {
     logic.handleDeleteBookmarks([id])
   }, [logic.handleDeleteBookmarks])
-  
+  //#endregion
 
+  //#region ─── Main content router (memoized) ────────────────────────────────
   const MainContent = useMemo(() => {
+    // ── FIX: use deferredHealth everywhere in this memo (both body and deps)
+    const health = deferredHealth
+
     // ─── Private view ──────────────────────────────────────────────────────
     if (logic.showPrivate) {
       return (
@@ -400,7 +482,7 @@ function FullViewContent() {
         <ForgottenView
           bookmarks={filterPrivateBookmarks(logic.forgottenFiltered)}
           visits={logic.visits}
-          health={logic.health}
+          health={health}
           months={logic.forgottenMonths}
           onOpen={logic.handleOpenBookmark}
           allCategories={logic.allCategoryNames}
@@ -454,9 +536,28 @@ function FullViewContent() {
     }
 
     // ─── Auto-categorization view ─────────────────────────────────────────
-    if (logic.groupMode === "topic" && logic.useAutoCategorization && Object.keys(logic.autoCategories).length > 0) {
+    // Only entered when the user has EXPLICITLY toggled auto on — never auto-switched.
+    if (logic.groupMode === "topic" && logic.useAutoCategorization) {
       const autoCategories = logic.autoCategories
       const categoryNames = Object.keys(autoCategories)
+
+      // While the categorization is still running and we have nothing yet,
+      // show a dedicated loading state instead of an empty view.
+      if (logic.isAutoCategorizing && categoryNames.length === 0) {
+        return (
+          <div style={{
+            textAlign: "center", color: colors.dim,
+            marginTop: "80px", fontSize: "13px",
+            letterSpacing: "0.05em", textTransform: "uppercase",
+            transition: "color 0.3s",
+          }}>
+            <SpinnerIcon size={22} color={colors.dim} />
+            <p style={{ marginTop: "12px", fontSize: "12px", letterSpacing: "0.04em" }}>
+              Analyzing {logic.allBookmarks.length} bookmarks…
+            </p>
+          </div>
+        )
+      }
 
       if (categoryNames.length === 0) {
         return (
@@ -467,16 +568,11 @@ function FullViewContent() {
             transition: "color 0.3s",
           }}>
             <Bracket theme={theme}>NO AUTO-CATEGORIES FOUND</Bracket>
-            {logic.isAutoCategorizing && (
-              <p style={{ marginTop: "10px", fontSize: "11px" }}>
-                <SpinnerIcon size={16} color={colors.dim} /> Analyzing your bookmarks...
-              </p>
-            )}
           </div>
         )
       }
 
-      return categoryNames.map((cat, i) => {
+      return categoryNames.map((cat) => {
         const entries = autoCategories[cat] || []
 
         const matchedBookmarks = entries
@@ -492,12 +588,14 @@ function FullViewContent() {
             return found
           })
           .filter(Boolean)
-          .filter(b => logic.isPrivateUnlocked || !logic.privateBookmarks.some(pb => pb.id === b.id))
+          // ── FIX: use Set lookup instead of .some()
+          .filter(b => logic.isPrivateUnlocked || !privateIds.has(b.id))
           .map(b => ({
             ...b,
             description: logic.meta[b.id]?.description,
-            healthStatus: logic.health[b.url]?.status,
-            isPrivate: logic.privateBookmarks.some(pb => pb.id === b.id)
+            healthStatus: health[b.url]?.status,
+            // ── FIX: Set lookup
+            isPrivate: privateIds.has(b.id)
           }))
 
         if (matchedBookmarks.length === 0) return null
@@ -532,7 +630,7 @@ function FullViewContent() {
     if (logic.groupMode === "date") {
       return (
         <TimelineView
-           categories={logic.visibleCategories}
+          categories={logic.visibleCategories}
           getFiltered={(cat: string) => filterPrivateBookmarks(logic.getFiltered(cat))}
           meta={logic.meta}
           allCategoryNames={logic.allCategoryNames}
@@ -541,9 +639,9 @@ function FullViewContent() {
           getCategoryIcon={getCategoryIcon}
           theme={theme}
           colors={colors}
-          onDeleteBookmarks={logic.handleDeleteBookmarks}   
-          onUpdateUrl={logic.handleUpdateUrl}               
-          onUpdateNote={logic.handleUpdateNote} 
+          onDeleteBookmarks={logic.handleDeleteBookmarks}
+          onUpdateUrl={logic.handleUpdateUrl}
+          onUpdateNote={logic.handleUpdateNote}
         />
       )
     }
@@ -562,13 +660,14 @@ function FullViewContent() {
       )
     }
 
-    return logic.visibleCategories.map((cat, i) => {
+    return logic.visibleCategories.map((cat) => {
       const filteredBookmarks = filterPrivateBookmarks(logic.getFiltered(cat))
         .map(b => ({
           ...b,
           description: logic.meta[b.id]?.description,
-          healthStatus: logic.health[b.url]?.status,
-          isPrivate: logic.privateBookmarks.some(pb => pb.id === b.id)
+          healthStatus: health[b.url]?.status,
+          // ── FIX: Set lookup
+          isPrivate: privateIds.has(b.id)
         }))
 
       if (filteredBookmarks.length === 0) return null
@@ -593,8 +692,6 @@ function FullViewContent() {
             onDeleteBookmarks={logic.handleDeleteBookmarks}
             onUpdateUrl={logic.handleUpdateUrl}
             onUpdateNote={logic.handleUpdateNote}
-            // theme={theme}
-            // colors={colors}
           />
         </div>
       )
@@ -604,7 +701,9 @@ function FullViewContent() {
     logic.showBroken, logic.showUnverifiable, logic.groupMode,
     logic.visibleCategories, logic.forgottenFiltered,
     logic.unverifiableFiltered, logic.brokenFiltered,
-    logic.duplicateResult, logic.visits, logic.health,
+    logic.duplicateResult, logic.visits,
+    // ── FIX: depend on deferredHealth, not logic.health
+    deferredHealth,
     logic.forgottenMonths, logic.meta, logic.privateBookmarks,
     logic.allCategoryNames, logic.getFiltered,
     logic.autoCategories, logic.isAutoCategorizing,
@@ -616,9 +715,11 @@ function FullViewContent() {
     logic.handleUpdateNote,
     logic.runHealthCheck,
     handleMarkWorking, handleMarkBroken, handleDeleteOne,
-    filterPrivateBookmarks, theme, colors
+    filterPrivateBookmarks, privateIds, theme, colors
   ])
+  //#endregion
 
+  //#region ─── Check-links / header memo props ───────────────────────────────
   const handleCheckLinks = useCallback((force: boolean) => {
     logic.runHealthCheck(force)
   }, [logic.runHealthCheck])
@@ -651,8 +752,15 @@ function FullViewContent() {
     transition: "background-color 0.3s, color 0.3s",
     position: "relative",
   }), [colors, isDark])
-  
 
+  // ── FIX: memoized check-links label props (avoids object identity churn)
+  const checkLabelColor = useMemo(
+    () => (logic.isChecking ? colors.dim : colors.ink),
+    [logic.isChecking, colors.dim, colors.ink]
+  )
+  //#endregion
+
+  //#region ─── Render ────────────────────────────────────────────────────────
   return (
     <div style={containerStyle}>
       <div style={{ maxWidth: "1200px", margin: "0 auto", position: "relative", zIndex: 1 }}>
@@ -688,10 +796,10 @@ function FullViewContent() {
             <HeaderStats {...headerStatsProps} />
           </div>
 
-          {/* OUTER: column wrapper (NEW) */}
+          {/* OUTER: column wrapper */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px", flexShrink: 0 }}>
 
-            {/* INNER: buttons row (was the old outer div, flexShrink removed) */}
+            {/* INNER: buttons row */}
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <ThemeToggle />
 
@@ -913,7 +1021,7 @@ function FullViewContent() {
                 disabled={logic.isChecking}
                 title={
                   logic.isChecking
-                    ? `Checking… ${logic.checkProgress!.done}/${logic.checkProgress!.total}`
+                    ? `Checking… ${logic.checkProgress?.done ?? 0}/${logic.checkProgress?.total ?? 0}`
                     : logic.healthRefresh.needsRefresh
                       ? "Update cached link check"
                       : "Re-check all links"
@@ -923,7 +1031,7 @@ function FullViewContent() {
                   padding: "9px 16px",
                   border: `1px solid ${logic.isChecking ? colors.dim : colors.line}`,
                   background: logic.isChecking ? colors.bgPanel : "transparent",
-                  color: logic.isChecking ? colors.dim : colors.ink,
+                  color: checkLabelColor,
                   fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase",
                   cursor: logic.isChecking ? "default" : "pointer", whiteSpace: "nowrap",
                   fontFamily: colors.mono,
@@ -931,13 +1039,13 @@ function FullViewContent() {
                   position: "relative",
                 }}
               >
-                {logic.isChecking ? (
-                  <><SpinnerIcon color={colors.dim} /> CHECKING {logic.checkProgress!.done}/{logic.checkProgress!.total}</>
-                ) : logic.healthRefresh.needsRefresh ? (
-                  <>◎ UPDATE LINK CHECK</>
-                ) : (
-                  <>◎ CHECK LINKS</>
-                )}
+                {/* ── FIX: isolated memoized label — only this subtree re-renders on progress ticks */}
+                <CheckLinksLabel
+                  isChecking={logic.isChecking}
+                  progress={logic.checkProgress ?? null}
+                  needsRefresh={logic.healthRefresh.needsRefresh}
+                  color={colors.dim}
+                />
               </motion.button>
 
             </div>{/* END INNER buttons row */}
@@ -1016,7 +1124,7 @@ function FullViewContent() {
             <input
               ref={inputRef}
               id="searchTextBox"
-              onFocus ={() => setIsSearchBarFocused(true)}
+              onFocus={() => setIsSearchBarFocused(true)}
               onBlur={() => setIsSearchBarFocused(false)}
               value={logic.search}
               onChange={e => { logic.setSearch(e.target.value); logic.setSelectedCategory(""); logic.setShowForgotten(false); logic.setShowBroken(false); logic.setShowUnverifiable(false); logic.setShowDuplicates(false) }}
@@ -1253,15 +1361,29 @@ function FullViewContent() {
                     >⧉ DUPLICATES</YorhaPill>
                   )}
 
-                  {logic.groupMode === "topic" && !logic.search && logic.autoCategories && Object.keys(logic.autoCategories).length > 0 && (
+                  {/* ── AUTO pill — always visible in topic mode (no search).
+                       While categorizing, it shows a spinner and is non-clickable.
+                       It NEVER auto-activates — user must click it explicitly. */}
+                  {logic.groupMode === "topic" && !logic.search && (
                     <YorhaPill
                       active={logic.useAutoCategorization}
                       accent={isDark ? "#7c6ab0" : "#5b4a8a"}
-                      onClick={logic.toggleAutoCategorization}
+                      onClick={logic.isAutoCategorizing ? undefined : logic.toggleAutoCategorization}
+                      disabled={logic.isAutoCategorizing}
                       theme={theme}
                       colors={colors}
                     >
-                      🤖 AUTO
+                      {logic.isAutoCategorizing ? (
+                        <>
+                          <SpinnerIcon
+                            size={11}
+                            color={logic.useAutoCategorization ? colors.bg : colors.dim}
+                          />
+                          AUTO
+                        </>
+                      ) : (
+                        <>🤖 AUTO</>
+                      )}
                     </YorhaPill>
                   )}
 
@@ -1495,26 +1617,89 @@ function FullViewContent() {
         )}
       </AnimatePresence>
 
+      {/* ── Scroll to top — bottom-right of viewport ─────────────────────── */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.18 }}
+            whileHover={{ y: -2 }}
+            whileTap={{ y: 0 }}
+            onClick={scrollToSearch}
+            title="Back to search"
+            aria-label="Scroll to search"
+            style={{
+              position: "fixed",
+              right: "20px",
+              bottom: "20px",
+              zIndex: 500,
+              width: "40px",
+              height: "40px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 0,
+              border: `1px solid ${colors.line}`,
+              background: colors.bg,
+              color: colors.ink,
+              fontFamily: colors.mono,
+              fontSize: "16px",
+              lineHeight: 1,
+              cursor: "pointer",
+              boxShadow: isDark
+                ? "3px 3px 0 rgba(0,0,0,0.4)"
+                : "3px 3px 0 rgba(22,21,17,0.12)",
+              transition: "background-color 0.3s, color 0.3s, border-color 0.3s",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = colors.ink
+              e.currentTarget.style.color = colors.bg
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = colors.bg
+              e.currentTarget.style.color = colors.ink
+            }}
+          >
+            ↑
+          </motion.button>
+        )}
+      </AnimatePresence>
+
     </div>
   )
+  //#endregion
 }
-
+//#endregion
 //#endregion
 
-// ─── YorhaPill ────────────────────────────────────────────────────────────────
+//#region ─── YorhaPill ────────────────────────────────────────────────────────
 
-const YorhaPill = React.memo(function YorhaPill({ active, accent, count, joinRight, paddingRight, onClick, children, theme, colors }: {
-  active: boolean; accent?: string; count?: number; joinRight?: boolean; paddingRight?: string
-  onClick: () => void; children: React.ReactNode; theme?: string; colors?: any
+const YorhaPill = React.memo(function YorhaPill({
+  active, accent, count, joinRight, paddingRight, onClick, children,
+  theme, colors, disabled,
+}: {
+  active: boolean
+  accent?: string
+  count?: number
+  joinRight?: boolean
+  paddingRight?: string
+  onClick?: () => void
+  children: React.ReactNode
+  theme?: string
+  colors?: any
+  disabled?: boolean
 }) {
   const col = colors || getThemeColors(theme || 'light')
   const color = accent || col.ink
 
   return (
     <motion.button
-      whileHover={{ y: -1 }}
-      whileTap={{ y: 0 }}
+      whileHover={disabled ? {} : { y: -1 }}
+      whileTap={disabled ? {} : { y: 0 }}
       onClick={onClick}
+      disabled={disabled}
       style={{
         display: "flex", alignItems: "center", gap: "6px",
         padding: `8px ${paddingRight || "14px"} 8px 14px`,
@@ -1524,9 +1709,11 @@ const YorhaPill = React.memo(function YorhaPill({ active, accent, count, joinRig
         borderRightWidth: joinRight ? "0px" : "1px",
         background: active ? color : "transparent",
         color: active ? col.bg : col.ink,
-        fontSize: "11px", letterSpacing: "0.06em", cursor: "pointer",
+        fontSize: "11px", letterSpacing: "0.06em",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.75 : 1,
         fontFamily: col.mono, whiteSpace: "nowrap", position: "relative",
-        transition: "background-color 0.3s, color 0.3s, border-color 0.3s",
+        transition: "background-color 0.3s, color 0.3s, border-color 0.3s, opacity 0.3s",
       }}
     >
       {children}
@@ -1541,9 +1728,9 @@ const YorhaPill = React.memo(function YorhaPill({ active, accent, count, joinRig
     </motion.button>
   )
 })
+//#endregion
 
-// ─── CardActionButton ─────────────────────────────────────────────────────────
-// Small inline button used on the compact BookmarkCard for triage actions.
+//#region ─── CardActionButton ─────────────────────────────────────────────────
 
 function CardActionButton({
   onClick, color, children, colors, title,
@@ -1579,8 +1766,9 @@ function CardActionButton({
     </motion.button>
   )
 }
+//#endregion
 
-// ─── ForgottenView ────────────────────────────────────────────────────────────
+//#region ─── ForgottenView ────────────────────────────────────────────────────
 
 const ForgottenView = React.memo(function ForgottenView({ bookmarks, visits, health, months, onOpen, allCategories, onAssignCategory, theme, colors }: {
   bookmarks: any[]; visits: VisitStore; health: HealthStore; months: number
@@ -1635,8 +1823,9 @@ const ForgottenView = React.memo(function ForgottenView({ bookmarks, visits, hea
     </div>
   )
 })
+//#endregion
 
-// ─── BrokenView ───────────────────────────────────────────────────────────────
+//#region ─── BrokenView ───────────────────────────────────────────────────────
 
 const BrokenView = React.memo(function BrokenView({
   bookmarks, unverifiable, visits, isChecking, onOpen, onRecheck,
@@ -1645,7 +1834,7 @@ const BrokenView = React.memo(function BrokenView({
   theme, colors, disableFavicon
 }: {
   bookmarks: any[]; unverifiable: any[]; visits: VisitStore; isChecking: boolean
-  onOpen: (id: string, url: string) => void; onRecheck: (urls:string[]) => void
+  onOpen: (id: string, url: string) => void; onRecheck: (urls: string[]) => void
   allCategories: string[]; onAssignCategory: (id: string, cat: string) => void
   onMarkWorking: (url: string) => void
   onMarkBroken: (url: string) => void
@@ -1656,11 +1845,18 @@ const BrokenView = React.memo(function BrokenView({
   const col = colors || getThemeColors(theme || 'light')
   const isDark = theme === "dark" || theme === "high-contrast-dark"
 
-  const deadHealth: HealthStore = {}
-  for (const b of bookmarks) deadHealth[b.url] = { status: "dead", checkedAt: Date.now() }
+  // ── FIX: memoize derived health maps so they aren't rebuilt on every render
+  const deadHealth: HealthStore = useMemo(() => {
+    const h: HealthStore = {}
+    for (const b of bookmarks) h[b.url] = { status: "dead", checkedAt: Date.now() }
+    return h
+  }, [bookmarks])
 
-  const unverifiableHealth: HealthStore = {}
-  for (const b of unverifiable) unverifiableHealth[b.url] = { status: "unverifiable", checkedAt: Date.now() }
+  const unverifiableHealth: HealthStore = useMemo(() => {
+    const h: HealthStore = {}
+    for (const b of unverifiable) h[b.url] = { status: "unverifiable", checkedAt: Date.now() }
+    return h
+  }, [unverifiable])
 
   if (isChecking) return (
     <div style={{ textAlign: "center", color: col.dim, marginTop: "80px", transition: "color 0.3s" }}>
@@ -1718,7 +1914,7 @@ const BrokenView = React.memo(function BrokenView({
                 </p>
               </div>
             </div>
-            <motion.button whileHover={{ y: -1 }} onClick={()=>onRecheck(bookmarks.map(b => b.url))} style={{
+            <motion.button whileHover={{ y: -1 }} onClick={() => onRecheck(bookmarks.map(b => b.url))} style={{
               padding: "7px 14px", border: `1px solid ${col.line}`,
               background: "transparent", color: col.ink,
               fontSize: "11px", cursor: "pointer", flexShrink: 0,
@@ -1795,7 +1991,7 @@ const BrokenView = React.memo(function BrokenView({
                 </p>
               </div>
             </div>
-            <motion.button whileHover={{ y: -1 }} onClick={()=> onRecheck(unverifiable.map(b => b.url))} style={{
+            <motion.button whileHover={{ y: -1 }} onClick={() => onRecheck(unverifiable.map(b => b.url))} style={{
               padding: "7px 14px", border: `1px solid ${col.line}`,
               background: "transparent", color: col.ink,
               fontSize: "11px", cursor: "pointer", flexShrink: 0,
@@ -1854,8 +2050,9 @@ const BrokenView = React.memo(function BrokenView({
     </div>
   )
 })
+//#endregion
 
-// ─── Shared BookmarkCard ──────────────────────────────────────────────────────
+//#region ─── Shared BookmarkCard ──────────────────────────────────────────────
 // NOTE: This is a *local* compact card used only by ForgottenView / BrokenView.
 // The interactive card with the lock button lives in `components/BookmarkCard.tsx`
 // and is rendered by `CollapsibleCategory`. This one intentionally has no toggle.
@@ -1968,3 +2165,4 @@ const BookmarkCard = React.memo(function BookmarkCard({
     </div>
   )
 })
+//#endregion
