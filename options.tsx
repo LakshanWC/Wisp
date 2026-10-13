@@ -33,6 +33,14 @@ import WispIntro from "~intro/WispIntro"
 const INTRO_KEY = "wisp_intro_seen"
 //#endregion
 
+//#region ─── Health context ────────────────────────────────────────────────────
+// ✦ FIX: Share the (large, frequently-changing) health store via context so
+//        BookmarkCard can subscribe to it directly instead of every health
+//        tick invalidating the whole MainContent memo.
+const HealthContext = React.createContext<HealthStore>({})
+const useHealth = () => React.useContext(HealthContext)
+//#endregion
+
 //#region ─── Bracket ───────────────────────────────────────────────────────────
 const Bracket = React.memo(function Bracket({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
@@ -92,6 +100,104 @@ const SkeletonPill = React.memo(function SkeletonPill({ width = 90 }: { width?: 
     />
   )
 })
+
+//#region ─── Content skeletons ─────────────────────────────────────────────────
+// ✦ FIX: YouTube-style shimmer placeholders shown while the bookmark tree is
+//        being read. They mirror the real category layout so nothing jumps
+//        when the actual data lands.
+
+// ✦ FIX: Self-contained shimmer element — a moving highlight sweep across a
+//        dark base, exactly like YouTube's skeleton loader. Replaces the
+//        static `wisp-skel` divs which never actually animated.
+const Skel = React.memo(function Skel({
+  className,
+  style,
+}: {
+  className?: string
+  style?: React.CSSProperties
+}) {
+  return (
+    <div
+      className={`wisp-skel${className ? ` ${className}` : ""}`}
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        background: "var(--bg-secondary, rgba(255,255,255,0.06))",
+        ...style,
+      }}
+    >
+      <motion.div
+        aria-hidden="true"
+        initial={{ x: "-100%" }}
+        animate={{ x: "100%" }}
+        transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.10) 50%, transparent 100%)",
+          pointerEvents: "none",
+        }}
+      />
+    </div>
+  )
+})
+
+const CategorySkeleton = React.memo(function CategorySkeleton({
+  cardCount = 4,
+}: {
+  cardCount?: number
+}) {
+  const cards = React.useMemo(
+    () => Array.from({ length: cardCount }, (_, i) => i),
+    [cardCount]
+  )
+  return (
+    <div className="wisp-cat wisp-cat--skeleton" aria-hidden="true">
+      <div className="wisp-cat__accent" />
+      <div className="wisp-cat__header">
+        <div className="wisp-cat__header-left">
+          <Skel className="wisp-skel--folder" />
+          <div className="wisp-cat__title-block" style={{ flex: 1, minWidth: 0 }}>
+            <Skel className="wisp-skel--title" />
+            <Skel className="wisp-skel--subtitle" />
+          </div>
+        </div>
+        <div className="wisp-cat__actions">
+          <Skel className="wisp-skel--chev" />
+        </div>
+      </div>
+      <div style={{ padding: "20px 24px" }}>
+        <div className="wisp-cat__grid">
+          {cards.map(i => (
+            <div key={i} className="wisp-skel-card">
+              <div className="wisp-skel-card__row">
+                <Skel className="wisp-skel--favicon" />
+                <Skel className="wisp-skel--cardtitle" />
+              </div>
+              <Skel className="wisp-skel--cardline" />
+              <Skel className="wisp-skel--cardline short" />
+              <div className="wisp-skel-card__footer">
+                <Skel className="wisp-skel--chip" />
+                <Skel className="wisp-skel--chip" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+})
+
+const ContentSkeleton = React.memo(function ContentSkeleton() {
+  return (
+    <div className="wisp-skeleton-stack">
+      <CategorySkeleton cardCount={4} />
+      <CategorySkeleton cardCount={3} />
+    </div>
+  )
+})
+//#endregion
 
 const CheckLinksLabel = React.memo(function CheckLinksLabel({
   isChecking,
@@ -157,6 +263,7 @@ function FullViewRoot() {
 //#region ─── FullViewContent ───────────────────────────────────────────────────
 
 function FullViewContent() {
+
   //#region ─── Hooks & state ─────────────────────────────────────────────────
   const logic = useFullViewLogic()
   const { theme } = useTheme()   // only used for modal/panel props
@@ -170,6 +277,8 @@ function FullViewContent() {
   const [banner, setBanner] = useState<BannerPayload | null>(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
 
+  // ✦ FIX: Defer the health store so urgent UI updates (scroll, typing)
+  //        don't block on health-check commits.
   const deferredHealth = useDeferredValue(logic.health)
 
   const privateIds = useMemo(
@@ -267,13 +376,20 @@ function FullViewContent() {
   //#endregion
 
   //#region ─── Derived loading / presence flags ──────────────────────────────
-  const isLoading = useMemo(
-    () =>
+  // ✦ FIX: Prefer the explicit `bookmarksLoaded` flag from logic if it exists
+  //        (users with literally zero bookmarks would otherwise be stuck in
+  //        "loading" forever). Fall back to the old heuristic if the flag
+  //        isn't present yet.
+  const isLoading = useMemo(() => {
+    if (typeof (logic as any).bookmarksLoaded === "boolean") {
+      return !(logic as any).bookmarksLoaded
+    }
+    return (
       logic.allBookmarks.length === 0 &&
       logic.importStatus !== "done" &&
-      logic.importStatus !== "error",
-    [logic.allBookmarks.length, logic.importStatus]
-  )
+      logic.importStatus !== "error"
+    )
+  }, [logic.allBookmarks.length, logic.importStatus, (logic as any).bookmarksLoaded])
 
   const hasCustomCats = useMemo(() => logic.customCats.length > 0, [logic.customCats.length])
   const hasForgotten = useMemo(() => logic.forgottenBookmarks.length > 0, [logic.forgottenBookmarks.length])
@@ -283,29 +399,39 @@ function FullViewContent() {
   //#endregion
 
   //#region ─── Category pills (with inline rename / delete) ──────────────────
+  // ✦ FIX: Pull only the fields we need, so the memo doesn't depend on the
+  //        entire `logic` object (which changes identity every render).
+  const {
+    categories, pillsExpanded, selectedCategory,
+    showForgotten, showBroken, showUnverifiable, showDuplicates,
+    renamingCat, renameValue, customCats, grouped, groupMode, aliases,
+    handleCategoryChange, handleRenameCommit, handleRenameStart,
+    handleDeleteCategory, setRenameValue, setRenamingCat, setPillsExpanded,
+  } = logic
+
   const CategoryPills = useMemo(() => {
-    const categories = logic.pillsExpanded ? logic.categories : logic.categories.slice(0, PILLS_PREVIEW)
-    return categories.map(cat => {
-      const customCat = logic.customCats.find(c => c.name === cat)
-      if (logic.renamingCat === cat) {
+    const cats = pillsExpanded ? categories : categories.slice(0, PILLS_PREVIEW)
+    return cats.map(cat => {
+      const customCat = customCats.find(c => c.name === cat)
+      if (renamingCat === cat) {
         return (
           <div key={cat} className="wisp-rename">
             <input
               ref={logic.renameInputRef}
-              value={logic.renameValue}
-              onChange={e => logic.setRenameValue(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") logic.handleRenameCommit(); if (e.key === "Escape") logic.setRenamingCat(null) }}
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleRenameCommit(); if (e.key === "Escape") setRenamingCat(null) }}
               className="wisp-rename__input"
             />
             <button
-              onClick={logic.handleRenameCommit}
-              disabled={!logic.renameValue.trim()}
+              onClick={handleRenameCommit}
+              disabled={!renameValue.trim()}
               className="wisp-rename__save"
             >
               Save
             </button>
-            <button onClick={() => logic.setRenamingCat(null)} className="wisp-rename__cancel">✕</button>
-            {Object.values(logic.aliases).includes(cat) && (
+            <button onClick={() => setRenamingCat(null)} className="wisp-rename__cancel">✕</button>
+            {Object.values(aliases).includes(cat) && (
               <button onClick={() => logic.handleRenameRevert(cat)} className="wisp-rename__revert">↩ revert</button>
             )}
           </div>
@@ -314,21 +440,21 @@ function FullViewContent() {
       return (
         <div key={cat} className="wisp-pill-group">
           <YorhaPill
-            active={!logic.showForgotten && !logic.showBroken && !logic.showUnverifiable && !logic.showDuplicates && logic.selectedCategory === cat}
-            count={logic.grouped[cat].length}
+            active={!showForgotten && !showBroken && !showUnverifiable && !showDuplicates && selectedCategory === cat}
+            count={grouped[cat].length}
             paddingRight={customCat ? "56px" : "36px"}
-            onClick={() => logic.handleCategoryChange(logic.selectedCategory === cat ? "" : cat)}
+            onClick={() => handleCategoryChange(selectedCategory === cat ? "" : cat)}
           >
-            {getCategoryIcon(cat, logic.groupMode)} {cat.toUpperCase()}
+            {getCategoryIcon(cat, groupMode)} {cat.toUpperCase()}
           </YorhaPill>
           <button
-            onClick={e => { e.stopPropagation(); logic.handleRenameStart(cat) }}
+            onClick={e => { e.stopPropagation(); handleRenameStart(cat) }}
             className={`wisp-pill-edit wisp-pill-edit--rename${customCat ? " has-delete" : ""}`}
             title="Rename category"
           >✎</button>
           {customCat && (
             <button
-              onClick={e => { e.stopPropagation(); logic.handleDeleteCategory(customCat.id) }}
+              onClick={e => { e.stopPropagation(); handleDeleteCategory(customCat.id) }}
               className="wisp-pill-edit wisp-pill-edit--delete"
               title="Delete category"
             >✕</button>
@@ -337,12 +463,12 @@ function FullViewContent() {
       )
     })
   }, [
-    logic.categories, logic.pillsExpanded, logic.selectedCategory,
-    logic.showForgotten, logic.showBroken, logic.showUnverifiable,
-    logic.showDuplicates, logic.renamingCat, logic.renameValue,
-    logic.customCats, logic.grouped, logic.groupMode, logic.handleCategoryChange,
-    logic.handleRenameCommit, logic.handleRenameStart, logic.handleDeleteCategory,
-    logic.setRenameValue, logic.setRenamingCat,
+    categories, pillsExpanded, selectedCategory,
+    showForgotten, showBroken, showUnverifiable, showDuplicates,
+    renamingCat, renameValue, customCats, grouped, groupMode, aliases,
+    handleCategoryChange, handleRenameCommit, handleRenameStart, handleDeleteCategory,
+    setRenameValue, setRenamingCat,
+    logic.renameInputRef, logic.handleRenameRevert,
   ])
   //#endregion
 
@@ -368,8 +494,10 @@ function FullViewContent() {
   //#endregion
 
   //#region ─── Main content router (memoized) ────────────────────────────────
+  // ✦ FIX: This memo no longer depends on `deferredHealth` or `logic.health`.
+  //        BookmarkCard pulls health from HealthContext instead, so health
+  //        ticks no longer rebuild the entire content tree.
   const MainContent = useMemo(() => {
-    const health = deferredHealth
 
     if (logic.showPrivate) {
       return (
@@ -398,7 +526,6 @@ function FullViewContent() {
         <ForgottenView
           bookmarks={filterPrivateBookmarks(logic.forgottenFiltered)}
           visits={logic.visits}
-          health={health}
           months={logic.forgottenMonths}
           onOpen={logic.handleOpenBookmark}
           allCategories={logic.allCategoryNames}
@@ -443,22 +570,22 @@ function FullViewContent() {
       )
     }
 
+    // ✦ FIX: Show the card skeleton IMMEDIATELY while AUTO is computing, and
+    //        ONLY while it's computing. Once `isAutoCategorizing` flips false,
+    //        we fall through to the real categories below. This has to be
+    //        ABOVE the topic-mode branch because FullViewLogic only flips
+    //        `useAutoCategorization = true` AFTER the compute finishes.
+    if (logic.isAutoCategorizing) {
+      return <ContentSkeleton />
+    }
+
     if (logic.groupMode === "topic" && logic.useAutoCategorization) {
       const autoCategories = logic.autoCategories
       const categoryNames = Object.keys(autoCategories)
 
-      if (logic.isAutoCategorizing && categoryNames.length === 0) {
-        return (
-          <div className="wisp-placeholder">
-            <SpinnerIcon size={22} color="var(--text-dim)" />
-            <p className="wisp-placeholder__sub">
-              Analyzing {logic.allBookmarks.length} bookmarks…
-            </p>
-          </div>
-        )
-      }
-
       if (categoryNames.length === 0) {
+        // ✦ FIX: still skeleton if the tree is loading
+        if (isLoading) return <ContentSkeleton />
         return (
           <div className="wisp-placeholder">
             <Bracket>NO AUTO-CATEGORIES FOUND</Bracket>
@@ -486,7 +613,6 @@ function FullViewContent() {
           .map(b => ({
             ...b,
             description: logic.meta[b.id]?.description,
-            healthStatus: health[b.url]?.status,
             isPrivate: privateIds.has(b.id)
           }))
 
@@ -529,7 +655,13 @@ function FullViewContent() {
       )
     }
 
+    // ✦ FIX: Three-state gate — while the tree is still loading, show a
+    //        skeleton grid instead of "NO ENTRIES FOUND". The empty state
+    //        only appears once we've confirmed there's nothing to show.
     if (logic.visibleCategories.length === 0) {
+      if (isLoading) {
+        return <ContentSkeleton />
+      }
       return (
         <div className="wisp-placeholder">
           <Bracket>NO ENTRIES FOUND</Bracket>
@@ -542,7 +674,6 @@ function FullViewContent() {
         .map(b => ({
           ...b,
           description: logic.meta[b.id]?.description,
-          healthStatus: health[b.url]?.status,
           isPrivate: privateIds.has(b.id)
         }))
 
@@ -566,12 +697,13 @@ function FullViewContent() {
       )
     }).filter(Boolean)
   }, [
+    // ✦ FIX: Trimmed dep list — removed `deferredHealth`, `logic.health`,
+    //        `logic.runHealthCheck`; added `isLoading` for the skeleton gate.
     logic.showPrivate, logic.showDuplicates, logic.showForgotten,
     logic.showBroken, logic.showUnverifiable, logic.groupMode,
     logic.visibleCategories, logic.forgottenFiltered,
     logic.unverifiableFiltered, logic.brokenFiltered,
     logic.duplicateResult, logic.visits,
-    deferredHealth,
     logic.forgottenMonths, logic.meta,
     logic.allCategoryNames, logic.getFiltered,
     logic.autoCategories, logic.isAutoCategorizing,
@@ -581,9 +713,11 @@ function FullViewContent() {
     logic.handleAssignCategory, logic.handleDeleteDuplicates,
     logic.handleDeleteBookmarks, logic.handleUpdateUrl,
     logic.handleUpdateNote,
-    logic.runHealthCheck,
+    logic.runHealthCheckForUrls,
     handleMarkWorking, handleMarkBroken, handleDeleteOne,
     filterPrivateBookmarks, privateIds, theme,
+    showBanner,
+    isLoading,
   ])
   //#endregion
 
@@ -605,545 +739,570 @@ function FullViewContent() {
 
   //#region ─── Render ────────────────────────────────────────────────────────
   return (
-    <div className="wisp-shell">
-      <div className="wisp-shell__inner">
+    <HealthContext.Provider value={deferredHealth}>
+      <div className="wisp-shell">
+        <div className="wisp-shell__inner">
 
-        {/* ── Header ───────────────────────────────────────────────────────── */}
-        <div className="wisp-head">
-          <div>
-            <div className="wisp-head__brand">
-              <h1 className="wisp-head__title">Wisp</h1>
-              <span className="wisp-head__subtitle">// ARCHIVE UNIT</span>
+          {/* ── Header ───────────────────────────────────────────────────────── */}
+          <div className="wisp-head">
+            <div>
+              <div className="wisp-head__brand">
+                <h1 className="wisp-head__title">Wisp</h1>
+                <span className="wisp-head__subtitle">// ARCHIVE UNIT</span>
+              </div>
+              <HeaderStats {...headerStatsProps} />
             </div>
-            <HeaderStats {...headerStatsProps} />
-          </div>
 
-          <div className="wisp-head__right">
-            <div className="wisp-head__row">
-              <ThemeToggle />
+            <div className="wisp-head__right">
+              <div className="wisp-head__row">
+                <ThemeToggle />
 
-              {/* [⛨] About */}
-              <motion.button
-                whileHover={{ y: -1 }}
-                whileTap={{ y: 0 }}
-                onClick={() => setShowSystemModal(true)}
-                className="wisp-hbtn"
-                title="About Wisp · permissions"
-              >
-                ⛨ ABOUT
-              </motion.button>
-
-              {/* [⇪] Updates */}
-              <motion.button
-                whileHover={{ y: -1 }}
-                whileTap={{ y: 0 }}
-                onClick={() => setShowUpdatesModal(true)}
-                className={`wisp-hbtn${hasNews ? " is-news" : ""}`}
-                style={{ position: "relative" }}
-                title={hasNews ? "New version available" : "Updates · release notes"}
-              >
-                ⇪ UPDATES
-                {hasNews && <span className="wisp-hbtn__dot" />}
-              </motion.button>
-
-              {logic.importStatus === "importing" && (
-                <span className="wisp-import-status is-importing">
-                  <SpinnerIcon size={12} color="var(--text-dim)" /> SYNCING…
-                </span>
-              )}
-              {logic.importStatus === "done" && logic.importResult && (
-                <span className="wisp-import-status is-done">
-                  {"metaRestored" in logic.importResult ? (
-                    <>
-                      ✓ RESTORED {logic.importResult.metaRestored}
-                      {logic.importResult.createdCount > 0 ? ` · ${logic.importResult.createdCount} CREATED` : ""}
-                      {logic.importResult.unmatched > 0 ? ` · ${logic.importResult.unmatched} UNMATCHED` : ""}
-                    </>
-                  ) : (
-                    <>
-                      ✓ IMPORTED {logic.importResult.bookmarks}
-                      {logic.importResult.folders > 0 ? ` · ${logic.importResult.folders} FOLDERS` : ""}
-                      {logic.importResult.skipped > 0 ? ` · ${logic.importResult.skipped} SKIPPED` : ""}
-                    </>
-                  )}
-                </span>
-              )}
-              {logic.importStatus === "error" && (
-                <span className="wisp-import-status is-error" title={logic.importError ?? ""}>
-                  ✕ {logic.importError}
-                </span>
-              )}
-
-              <input
-                ref={logic.importInputRef}
-                type="file"
-                accept=".json,.html"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0] || null
-                  e.target.value = ""
-                  if (file) logic.handleImport(file)
-                }}
-              />
-
-              {/* Export / Import menu */}
-              <div ref={logic.exportMenuRef} className="wisp-menu-wrap">
+                {/* [⛨] About */}
                 <motion.button
                   whileHover={{ y: -1 }}
                   whileTap={{ y: 0 }}
-                  onClick={() => logic.setShowExportMenu(m => !m)}
-                  className={`wisp-hbtn${logic.showExportMenu ? " is-open" : ""}`}
+                  onClick={() => setShowSystemModal(true)}
+                  className="wisp-hbtn"
+                  title="About Wisp · permissions"
                 >
-                  ↓ EXPORT / IMPORT
+                  ⛨ ABOUT
                 </motion.button>
 
-                <AnimatePresence>
-                  {logic.showExportMenu && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -6 }}
-                      transition={{ duration: 0.15 }}
-                      className="wisp-menu"
-                    >
-                      <div className="wisp-menu__label">▸ Export</div>
-                      <button
-                        onClick={() => { exportStandardHtml(); logic.setShowExportMenu(false) }}
-                        className="wisp-menu__item"
-                      >
-                        <div className="wisp-menu__item-title">BROWSER FORMAT</div>
-                        <div className="wisp-menu__item-sub">Standard HTML — import into any browser</div>
-                      </button>
-                      <button
-                        onClick={() => { exportWispBackup(); logic.setShowExportMenu(false) }}
-                        className="wisp-menu__item"
-                      >
-                        <div className="wisp-menu__item-title">Wisp BACKUP</div>
-                        <div className="wisp-menu__item-sub">JSON — preserves categories, notes & aliases</div>
-                      </button>
-
-                      <div className="wisp-menu__label alt">▸ Import</div>
-                      <button
-                        onClick={() => { logic.importInputRef.current?.click(); logic.setShowExportMenu(false) }}
-                        className="wisp-menu__item"
-                      >
-                        <div className="wisp-menu__item-title">RESTORE BACKUP</div>
-                        <div className="wisp-menu__item-sub">Re-applies categories, notes & aliases by URL</div>
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Check Links */}
-              <motion.button
-                whileHover={logic.isChecking ? {} : { y: -1 }}
-                whileTap={logic.isChecking ? {} : { y: 0 }}
-                onClick={() => handleCheckLinks(logic.healthRefresh.needsRefresh ? false : true)}
-                disabled={logic.isChecking}
-                className={`wisp-hbtn${logic.isChecking ? " is-checking" : ""}`}
-                title={
-                  logic.isChecking
-                    ? `Checking… ${logic.checkProgress?.done ?? 0}/${logic.checkProgress?.total ?? 0}`
-                    : logic.healthRefresh.needsRefresh
-                      ? "Update cached link check"
-                      : "Re-check all links"
-                }
-              >
-                <CheckLinksLabel
-                  isChecking={logic.isChecking}
-                  progress={logic.checkProgress ?? null}
-                  needsRefresh={logic.healthRefresh.needsRefresh}
-                  color="var(--text-dim)"
-                />
-              </motion.button>
-            </div>
-
-            {/* Buy me a coffee */}
-            <span>
-              <a
-                href="https://www.buymeacoffee.com/lampmoth"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="wisp-coffee"
-              >
-                ☕ Buy me a coffee
-              </a>
-            </span>
-          </div>
-        </div>
-
-        {/* ── Progress bar ─────────────────────────────────────────────────── */}
-        <AnimatePresence>
-          {logic.isChecking && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="wisp-progress"
-            >
-              <motion.div
-                animate={{ width: `${logic.progressPct}%` }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="wisp-progress__fill"
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ── Search + Group mode ───────────────────────────────────────────── */}
-        <div className="wisp-searchrow">
-          <div className="wisp-search">
-            <span className="wisp-search__caret">▸</span>
-            <input
-              ref={inputRef}
-              id="searchTextBox"
-              onFocus={() => setIsSearchBarFocused(true)}
-              onBlur={() => setIsSearchBarFocused(false)}
-              value={logic.search}
-              onChange={e => { logic.setSearch(e.target.value); logic.setSelectedCategory(""); logic.setShowForgotten(false); logic.setShowBroken(false); logic.setShowUnverifiable(false); logic.setShowDuplicates(false) }}
-              placeholder="SEARCH ARCHIVE..."
-              className="wisp-search__input"
-            />
-            {logic.search.length > 0 && (
-              <button
-                type="button"
-                onMouseDown={e => e.preventDefault()}
-                onClick={() => {
-                  logic.setSearch("")
-                  logic.setSelectedCategory("")
-                  logic.setShowForgotten(false)
-                  logic.setShowBroken(false)
-                  logic.setShowUnverifiable(false)
-                  logic.setShowDuplicates(false)
-                  inputRef.current?.focus()
-                }}
-                title="Clear search"
-                aria-label="Clear search"
-                className="wisp-search__clear"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          <div className="wisp-groupwrap">
-            <select
-              value={logic.groupMode}
-              onChange={e => logic.handleGroupModeChange(e.target.value as GroupMode)}
-              className="wisp-groupselect"
-            >
-              <option value="topic">Group: Topic</option>
-              <option value="domain">Group: Domain</option>
-              <option value="month">Group: Month</option>
-              <option value="date">Group: Date</option>
-            </select>
-            <div className="wisp-groupwrap__caret">▾</div>
-          </div>
-        </div>
-
-        {/* ── Pills ─────────────────────────────────────────────────────────── */}
-        {logic.showPills && (
-          <div className="wisp-pills">
-            {isLoading ? (
-              <div className="wisp-pills__row">
-                <SkeletonPill width={54} />
-                <SkeletonPill width={94} />
-                <SkeletonPill width={112} />
-                <SkeletonPill width={98} />
-                <SkeletonPill width={104} />
-                <SkeletonPill width={88} />
-                <SkeletonPill width={122} />
-                <SkeletonPill width={78} />
-              </div>
-            ) : (
-              <>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.2 }}
-                  className="wisp-pills__row"
+                {/* [⇪] Updates */}
+                <motion.button
+                  whileHover={{ y: -1 }}
+                  whileTap={{ y: 0 }}
+                  onClick={() => setShowUpdatesModal(true)}
+                  className={`wisp-hbtn${hasNews ? " is-news" : ""}`}
+                  style={{ position: "relative" }}
+                  title={hasNews ? "New version available" : "Updates · release notes"}
                 >
-                  <YorhaPill
-                    active={!logic.showForgotten && !logic.showBroken && !logic.showUnverifiable && !logic.showDuplicates && logic.selectedCategory === ""}
-                    onClick={() => { logic.setSelectedCategory(""); logic.setShowForgotten(false); logic.setShowBroken(false); logic.setShowUnverifiable(false); logic.setShowDuplicates(false) }}
-                  >ALL</YorhaPill>
+                  ⇪ UPDATES
+                  {hasNews && <span className="wisp-hbtn__dot" />}
+                </motion.button>
 
-                  <YorhaPill
-                    active={logic.showPrivate}
-                    accent="var(--accent-dark)"
-                    onClick={logic.togglePrivateView}
-                  >
-                    {logic.showPrivate ? (logic.isPrivateUnlocked ? "🔓" : "🔒") : "🔒"} PRIVATE
-                  </YorhaPill>
-
-                  {hasForgotten && (
-                    <div ref={logic.thresholdMenuRef} style={{ position: "relative" }}>
-                      <div className="wisp-pill-split">
-                        <YorhaPill
-                          active={logic.showForgotten}
-                          accent="var(--accent-primary)"
-                          count={logic.forgottenBookmarks.length}
-                          joinRight
-                          onClick={() => { logic.setShowForgotten(f => !f); logic.setShowBroken(false); logic.setShowUnverifiable(false); logic.setSelectedCategory(""); logic.setShowDuplicates(false) }}
-                        >◷ DORMANT</YorhaPill>
-                        <motion.button
-                          whileTap={{ scale: 0.94 }}
-                          onClick={e => { e.stopPropagation(); logic.setShowThresholdMenu(m => !m) }}
-                          className={`wisp-pill-split__chev${logic.showForgotten ? " is-active" : ""}`}
-                        >▾</motion.button>
-                      </div>
-                      <AnimatePresence>
-                        {logic.showThresholdMenu && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -6 }}
-                            transition={{ duration: 0.15 }}
-                            className="wisp-dropdown"
-                          >
-                            <p className="wisp-dropdown__title">Not visited in…</p>
-                            {FORGOTTEN_OPTIONS.map(opt => (
-                              <button
-                                key={opt.value}
-                                onClick={() => { logic.setForgottenMonths(opt.value); logic.setShowThresholdMenu(false); logic.setShowForgotten(true); logic.setShowBroken(false); logic.setShowUnverifiable(false); logic.setSelectedCategory(""); logic.setShowDuplicates(false) }}
-                                className={`wisp-dropdown__item${logic.forgottenMonths === opt.value ? " is-active" : ""}`}
-                              >
-                                {logic.forgottenMonths === opt.value && "▸ "}{opt.label}
-                              </button>
-                            ))}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  )}
-
-                  {hasBroken && (
-                    <YorhaPill
-                      active={logic.showBroken}
-                      accent="var(--status-broken)"
-                      count={logic.isChecking ? undefined : logic.brokenBookmarks.length}
-                      onClick={() => { logic.setShowBroken(b => !b); logic.setShowForgotten(false); logic.setShowUnverifiable(false); logic.setSelectedCategory(""); logic.setShowDuplicates(false) }}
-                    >
-                      {logic.isChecking ? <SpinnerIcon size={11} color="var(--text-dim)" /> : "✕"} SEVERED
-                    </YorhaPill>
-                  )}
-
-                  {hasUnverifiable && (
-                    <YorhaPill
-                      active={logic.showUnverifiable}
-                      accent="var(--accent-primary)"
-                      count={logic.isChecking ? undefined : logic.unverifiableBookmarks.length}
-                      onClick={() => { logic.setShowUnverifiable(u => !u); logic.setShowForgotten(false); logic.setShowBroken(false); logic.setSelectedCategory(""); logic.setShowDuplicates(false) }}
-                    >
-                      {logic.isChecking ? <SpinnerIcon size={11} color="var(--text-dim)" /> : "◐"} UNVERIFIED
-                    </YorhaPill>
-                  )}
-
-                  {hasDuplicates && (
-                    <YorhaPill
-                      active={logic.showDuplicates}
-                      accent="var(--accent-primary)"
-                      count={logic.duplicateCount}
-                      onClick={logic.toggleDuplicates}
-                    >⧉ DUPLICATES</YorhaPill>
-                  )}
-
-                  {logic.groupMode === "topic" && !logic.search && (
-                    <YorhaPill
-                      active={logic.useAutoCategorization}
-                      accent="var(--accent-dark)"
-                      onClick={logic.isAutoCategorizing ? undefined : logic.toggleAutoCategorization}
-                      disabled={logic.isAutoCategorizing}
-                    >
-                      {logic.isAutoCategorizing ? (
-                        <>
-                          <SpinnerIcon
-                            size={11}
-                            color={logic.useAutoCategorization ? "var(--bg-primary)" : "var(--text-dim)"}
-                          />
-                          AUTO
-                        </>
-                      ) : (
-                        <>🤖 AUTO</>
-                      )}
-                    </YorhaPill>
-                  )}
-
-                  {CategoryPills}
-
-                  {logic.categories.length > PILLS_PREVIEW && (
-                    <motion.button
-                      whileHover={{ y: -1 }}
-                      onClick={() => logic.setPillsExpanded(p => !p)}
-                      className="wisp-pill wisp-pill--dashed"
-                    >
-                      {logic.pillsExpanded ? "▲ Less" : <>▾ <span className="accent">+{logic.categories.length - PILLS_PREVIEW}</span> more</>}
-                    </motion.button>
-                  )}
-
-                  {!logic.showNewCatForm ? (
-                    <motion.button
-                      whileHover={{ y: -1 }}
-                      onClick={() => logic.setShowNewCatForm(true)}
-                      className="wisp-pill wisp-pill--dashed"
-                    >
-                      <span style={{ fontSize: "14px", lineHeight: 1 }}>+</span> New category
-                    </motion.button>
-                  ) : (
-                    <div className="wisp-newcat">
-                      <input
-                        value={logic.newCatIcon}
-                        onChange={e => logic.setNewCatIcon(e.target.value)}
-                        maxLength={2}
-                        className="wisp-newcat__icon"
-                      />
-                      <input
-                        ref={logic.newCatInputRef}
-                        value={logic.newCatName}
-                        onChange={e => logic.setNewCatName(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Enter") logic.handleAddCategory(); if (e.key === "Escape") { logic.setShowNewCatForm(false); logic.setNewCatName("") } }}
-                        placeholder="Category name"
-                        className="wisp-newcat__name"
-                      />
-                      <button
-                        onClick={logic.handleAddCategory}
-                        disabled={!logic.newCatName.trim()}
-                        className="wisp-newcat__add"
-                      >Add</button>
-                      <button
-                        onClick={() => { logic.setShowNewCatForm(false); logic.setNewCatName("") }}
-                        className="wisp-newcat__cancel"
-                      >✕</button>
-                    </div>
-                  )}
-                </motion.div>
-
-                {hasCustomCats && (
-                  <p className="wisp-pills__note">
-                    ▸ Custom categories have ✕ — click to delete. Select bookmarks inside a group to move, edit, or delete them.
-                  </p>
+                {logic.importStatus === "importing" && (
+                  <span className="wisp-import-status is-importing">
+                    <SpinnerIcon size={12} color="var(--text-dim)" /> SYNCING…
+                  </span>
                 )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── Vault backup reminder banner ─────────────────────────────────── */}
-        <NotificationBanner
-          show={banner !== null}
-          title={banner?.title ?? ""}
-          message={banner?.message ?? ""}
-          variant={banner?.variant}
-          icon={banner?.icon}
-          actionLabel={banner?.actionLabel}
-          onAction={banner?.onAction}
-          onDismiss={hideBanner}
-        />
-
-        {/* ── Health cache banner ──────────────────────────────────────────── */}
-        <AnimatePresence>
-          {logic.showHealthBanner && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="wisp-banner"
-            >
-              <div className="wisp-banner__left">
-                <span className="wisp-banner__icon">◈</span>
-                <div style={{ minWidth: 0 }}>
-                  <p className="wisp-banner__title">Link check may be stale</p>
-                  <p className="wisp-banner__msg">
-                    {healthRefreshMessage(logic.healthRefresh)}
-                    {logic.healthRefresh.lastCheckedAt && (
-                      <> · Last checked {relativeTime(logic.healthRefresh.lastCheckedAt)}</>
+                {logic.importStatus === "done" && logic.importResult && (
+                  <span className="wisp-import-status is-done">
+                    {"metaRestored" in logic.importResult ? (
+                      <>
+                        ✓ RESTORED {logic.importResult.metaRestored}
+                        {logic.importResult.createdCount > 0 ? ` · ${logic.importResult.createdCount} CREATED` : ""}
+                        {logic.importResult.unmatched > 0 ? ` · ${logic.importResult.unmatched} UNMATCHED` : ""}
+                      </>
+                    ) : (
+                      <>
+                        ✓ IMPORTED {logic.importResult.bookmarks}
+                        {logic.importResult.folders > 0 ? ` · ${logic.importResult.folders} FOLDERS` : ""}
+                        {logic.importResult.skipped > 0 ? ` · ${logic.importResult.skipped} SKIPPED` : ""}
+                      </>
                     )}
-                  </p>
+                  </span>
+                )}
+                {logic.importStatus === "error" && (
+                  <span className="wisp-import-status is-error" title={logic.importError ?? ""}>
+                    ✕ {logic.importError}
+                  </span>
+                )}
+
+                <input
+                  ref={logic.importInputRef}
+                  type="file"
+                  accept=".json,.html"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null
+                    e.target.value = ""
+                    if (file) logic.handleImport(file)
+                  }}
+                />
+
+                {/* Export / Import menu */}
+                <div ref={logic.exportMenuRef} className="wisp-menu-wrap">
+                  <motion.button
+                    whileHover={{ y: -1 }}
+                    whileTap={{ y: 0 }}
+                    onClick={() => logic.setShowExportMenu(m => !m)}
+                    className={`wisp-hbtn${logic.showExportMenu ? " is-open" : ""}`}
+                  >
+                    ↓ EXPORT / IMPORT
+                  </motion.button>
+
+                  <AnimatePresence>
+                    {logic.showExportMenu && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.15 }}
+                        className="wisp-menu"
+                      >
+                        <div className="wisp-menu__label">▸ Export</div>
+                        <button
+                          onClick={() => { exportStandardHtml(); logic.setShowExportMenu(false) }}
+                          className="wisp-menu__item"
+                        >
+                          <div className="wisp-menu__item-title">BROWSER FORMAT</div>
+                          <div className="wisp-menu__item-sub">Standard HTML — import into any browser</div>
+                        </button>
+                        <button
+                          onClick={() => { exportWispBackup(); logic.setShowExportMenu(false) }}
+                          className="wisp-menu__item"
+                        >
+                          <div className="wisp-menu__item-title">Wisp BACKUP</div>
+                          <div className="wisp-menu__item-sub">JSON — preserves categories, notes & aliases</div>
+                        </button>
+
+                        <div className="wisp-menu__label alt">▸ Import</div>
+                        <button
+                          onClick={() => { logic.importInputRef.current?.click(); logic.setShowExportMenu(false) }}
+                          className="wisp-menu__item"
+                        >
+                          <div className="wisp-menu__item-title">RESTORE BACKUP</div>
+                          <div className="wisp-menu__item-sub">Re-applies categories, notes & aliases by URL</div>
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-              </div>
-              <div className="wisp-banner__right">
-                <button
-                  onClick={() => { handleCheckLinks(false) }}
-                  className="wisp-banner__cta"
+
+                {/* Check Links */}
+                <motion.button
+                  whileHover={logic.isChecking ? {} : { y: -1 }}
+                  whileTap={logic.isChecking ? {} : { y: 0 }}
+                  onClick={() => handleCheckLinks(logic.healthRefresh.needsRefresh ? false : true)}
+                  disabled={logic.isChecking}
+                  className={`wisp-hbtn${logic.isChecking ? " is-checking" : ""}`}
+                  title={
+                    logic.isChecking
+                      ? `Checking… ${logic.checkProgress?.done ?? 0}/${logic.checkProgress?.total ?? 0}`
+                      : logic.healthRefresh.needsRefresh
+                        ? "Update cached link check"
+                        : "Re-check all links"
+                  }
                 >
-                  Check links
-                </button>
+                  <CheckLinksLabel
+                    isChecking={logic.isChecking}
+                    progress={logic.checkProgress ?? null}
+                    needsRefresh={logic.healthRefresh.needsRefresh}
+                    color="var(--text-dim)"
+                  />
+                </motion.button>
+              </div>
+
+              {/* Buy me a coffee */}
+              <span>
+                <a
+                  href="https://www.buymeacoffee.com/lampmoth"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="wisp-coffee"
+                >
+                  ☕ Buy me a coffee
+                </a>
+              </span>
+            </div>
+          </div>
+
+          {/* ── Progress bar ─────────────────────────────────────────────────── */}
+          <AnimatePresence>
+            {logic.isChecking && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="wisp-progress"
+              >
+                <motion.div
+                  animate={{ width: `${logic.progressPct}%` }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                  className="wisp-progress__fill"
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Search + Group mode ───────────────────────────────────────────── */}
+          <div className="wisp-searchrow">
+            <div className="wisp-search">
+              <span className="wisp-search__caret">▸</span>
+              <input
+                ref={inputRef}
+                id="searchTextBox"
+                onFocus={() => setIsSearchBarFocused(true)}
+                onBlur={() => setIsSearchBarFocused(false)}
+                value={logic.search}
+                onChange={e => { logic.setSearch(e.target.value); logic.setSelectedCategory(""); logic.setShowForgotten(false); logic.setShowBroken(false); logic.setShowUnverifiable(false); logic.setShowDuplicates(false) }}
+                placeholder="SEARCH ARCHIVE..."
+                className="wisp-search__input"
+              />
+              {logic.search.length > 0 && (
                 <button
-                  onClick={() => logic.setHealthBannerDismissed(true)}
-                  title="Dismiss for now"
-                  className="wisp-banner__close"
+                  type="button"
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => {
+                    logic.setSearch("")
+                    logic.setSelectedCategory("")
+                    logic.setShowForgotten(false)
+                    logic.setShowBroken(false)
+                    logic.setShowUnverifiable(false)
+                    logic.setShowDuplicates(false)
+                    inputRef.current?.focus()
+                  }}
+                  title="Clear search"
+                  aria-label="Clear search"
+                  className="wisp-search__clear"
                 >
                   ✕
                 </button>
-              </div>
+              )}
+            </div>
+            <div className="wisp-groupwrap">
+              <select
+                value={logic.groupMode}
+                onChange={e => logic.handleGroupModeChange(e.target.value as GroupMode)}
+                className="wisp-groupselect"
+              >
+                <option value="topic">Group: Topic</option>
+                <option value="domain">Group: Domain</option>
+                <option value="month">Group: Month</option>
+                <option value="date">Group: Date</option>
+              </select>
+              <div className="wisp-groupwrap__caret">▾</div>
+            </div>
+          </div>
+
+          {/* ── Pills ─────────────────────────────────────────────────────────── */}
+          {logic.showPills && (
+            <div className="wisp-pills">
+              {isLoading ? (
+                <div className="wisp-pills__row">
+                  <SkeletonPill width={54} />
+                  <SkeletonPill width={94} />
+                  <SkeletonPill width={112} />
+                  <SkeletonPill width={98} />
+                  <SkeletonPill width={104} />
+                  <SkeletonPill width={88} />
+                  <SkeletonPill width={122} />
+                  <SkeletonPill width={78} />
+                </div>
+              ) : (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2 }}
+                    className="wisp-pills__row"
+                  >
+                    <YorhaPill
+                      active={!logic.showForgotten && !logic.showBroken && !logic.showUnverifiable && !logic.showDuplicates && logic.selectedCategory === ""}
+                      onClick={() => { logic.setSelectedCategory(""); logic.setShowForgotten(false); logic.setShowBroken(false); logic.setShowUnverifiable(false); logic.setShowDuplicates(false) }}
+                    >ALL</YorhaPill>
+
+                    <YorhaPill
+                      active={logic.showPrivate}
+                      accent="var(--accent-dark)"
+                      onClick={logic.togglePrivateView}
+                    >
+                      {logic.showPrivate ? (logic.isPrivateUnlocked ? "🔓" : "🔒") : "🔒"} PRIVATE
+                    </YorhaPill>
+
+                    {hasForgotten && (
+                      <div ref={logic.thresholdMenuRef} style={{ position: "relative" }}>
+                        <div className="wisp-pill-split">
+                          <YorhaPill
+                            active={logic.showForgotten}
+                            accent="var(--accent-primary)"
+                            count={logic.forgottenBookmarks.length}
+                            joinRight
+                            onClick={() => { logic.setShowForgotten(f => !f); logic.setShowBroken(false); logic.setShowUnverifiable(false); logic.setSelectedCategory(""); logic.setShowDuplicates(false) }}
+                          >◷ DORMANT</YorhaPill>
+                          <motion.button
+                            whileTap={{ scale: 0.94 }}
+                            onClick={e => { e.stopPropagation(); logic.setShowThresholdMenu(m => !m) }}
+                            className={`wisp-pill-split__chev${logic.showForgotten ? " is-active" : ""}`}
+                          >▾</motion.button>
+                        </div>
+                        <AnimatePresence>
+                          {logic.showThresholdMenu && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -6 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -6 }}
+                              transition={{ duration: 0.15 }}
+                              className="wisp-dropdown"
+                            >
+                              <p className="wisp-dropdown__title">Not visited in…</p>
+                              {FORGOTTEN_OPTIONS.map(opt => (
+                                <button
+                                  key={opt.value}
+                                  onClick={() => { logic.setForgottenMonths(opt.value); logic.setShowThresholdMenu(false); logic.setShowForgotten(true); logic.setShowBroken(false); logic.setShowUnverifiable(false); logic.setSelectedCategory(""); logic.setShowDuplicates(false) }}
+                                  className={`wisp-dropdown__item${logic.forgottenMonths === opt.value ? " is-active" : ""}`}
+                                >
+                                  {logic.forgottenMonths === opt.value && "▸ "}{opt.label}
+                                </button>
+                              ))}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )}
+
+                    {hasBroken && (
+                      <YorhaPill
+                        active={logic.showBroken}
+                        accent="var(--status-broken)"
+                        count={logic.isChecking ? undefined : logic.brokenBookmarks.length}
+                        onClick={() => { logic.setShowBroken(b => !b); logic.setShowForgotten(false); logic.setShowUnverifiable(false); logic.setSelectedCategory(""); logic.setShowDuplicates(false) }}
+                      >
+                        {logic.isChecking ? <SpinnerIcon size={11} color="var(--text-dim)" /> : "✕"} SEVERED
+                      </YorhaPill>
+                    )}
+
+                    {hasUnverifiable && (
+                      <YorhaPill
+                        active={logic.showUnverifiable}
+                        accent="var(--accent-primary)"
+                        count={logic.isChecking ? undefined : logic.unverifiableBookmarks.length}
+                        onClick={() => { logic.setShowUnverifiable(u => !u); logic.setShowForgotten(false); logic.setShowBroken(false); logic.setSelectedCategory(""); logic.setShowDuplicates(false) }}
+                      >
+                        {logic.isChecking ? <SpinnerIcon size={11} color="var(--text-dim)" /> : "◐"} UNVERIFIED
+                      </YorhaPill>
+                    )}
+
+                    {hasDuplicates && (
+                      <YorhaPill
+                        active={logic.showDuplicates}
+                        accent="var(--accent-primary)"
+                        count={logic.duplicateCount}
+                        onClick={logic.toggleDuplicates}
+                      >⧉ DUPLICATES</YorhaPill>
+                    )}
+
+                    {logic.groupMode === "topic" && !logic.search && (
+                      <YorhaPill
+                        active={logic.useAutoCategorization}
+                        accent="var(--accent-dark)"
+                        onClick={logic.isAutoCategorizing ? undefined : logic.toggleAutoCategorization}
+                        disabled={logic.isAutoCategorizing}
+                      >
+                        {logic.isAutoCategorizing ? (
+                          <>
+                            <SpinnerIcon
+                              size={11}
+                              color={logic.useAutoCategorization ? "var(--bg-primary)" : "var(--text-dim)"}
+                            />
+                            AUTO
+                          </>
+                        ) : (
+                          <>🤖 AUTO</>
+                        )}
+                      </YorhaPill>
+                    )}
+
+                    {CategoryPills}
+
+                    {logic.categories.length > PILLS_PREVIEW && (
+                      <motion.button
+                        whileHover={{ y: -1 }}
+                        onClick={() => setPillsExpanded(p => !p)}
+                        className="wisp-pill wisp-pill--dashed"
+                      >
+                        {logic.pillsExpanded ? "▲ Less" : <>▾ <span className="accent">+{logic.categories.length - PILLS_PREVIEW}</span> more</>}
+                      </motion.button>
+                    )}
+
+                    {!logic.showNewCatForm ? (
+                      <motion.button
+                        whileHover={{ y: -1 }}
+                        onClick={() => logic.setShowNewCatForm(true)}
+                        className="wisp-pill wisp-pill--dashed"
+                      >
+                        <span style={{ fontSize: "14px", lineHeight: 1 }}>+</span> New category
+                      </motion.button>
+                    ) : (
+                      <div className="wisp-newcat">
+                        <input
+                          value={logic.newCatIcon}
+                          onChange={e => logic.setNewCatIcon(e.target.value)}
+                          maxLength={2}
+                          className="wisp-newcat__icon"
+                        />
+                        <input
+                          ref={logic.newCatInputRef}
+                          value={logic.newCatName}
+                          onChange={e => logic.setNewCatName(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") logic.handleAddCategory(); if (e.key === "Escape") { logic.setShowNewCatForm(false); logic.setNewCatName("") } }}
+                          placeholder="Category name"
+                          className="wisp-newcat__name"
+                        />
+                        <button
+                          onClick={logic.handleAddCategory}
+                          disabled={!logic.newCatName.trim()}
+                          className="wisp-newcat__add"
+                        >Add</button>
+                        <button
+                          onClick={() => { logic.setShowNewCatForm(false); logic.setNewCatName("") }}
+                          className="wisp-newcat__cancel"
+                        >✕</button>
+                      </div>
+                    )}
+                  </motion.div>
+
+                  {hasCustomCats && (
+                    <p className="wisp-pills__note">
+                      ▸ Custom categories have ✕ — click to delete. Select bookmarks inside a group to move, edit, or delete them.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── Vault backup reminder banner ─────────────────────────────────── */}
+          <NotificationBanner
+            show={banner !== null}
+            title={banner?.title ?? ""}
+            message={banner?.message ?? ""}
+            variant={banner?.variant}
+            icon={banner?.icon}
+            actionLabel={banner?.actionLabel}
+            onAction={banner?.onAction}
+            onDismiss={hideBanner}
+          />
+
+          {/* ── Health cache banner ──────────────────────────────────────────── */}
+          <AnimatePresence>
+            {logic.showHealthBanner && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="wisp-banner"
+              >
+                <div className="wisp-banner__left">
+                  <span className="wisp-banner__icon">◈</span>
+                  <div style={{ minWidth: 0 }}>
+                    <p className="wisp-banner__title">Link check may be stale</p>
+                    <p className="wisp-banner__msg">
+                      {healthRefreshMessage(logic.healthRefresh)}
+                      {logic.healthRefresh.lastCheckedAt && (
+                        <> · Last checked {relativeTime(logic.healthRefresh.lastCheckedAt)}</>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="wisp-banner__right">
+                  <button
+                    onClick={() => { handleCheckLinks(false) }}
+                    className="wisp-banner__cta"
+                  >
+                    Check links
+                  </button>
+                  <button
+                    onClick={() => logic.setHealthBannerDismissed(true)}
+                    title="Dismiss for now"
+                    className="wisp-banner__close"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Main content ─────────────────────────────────────────────────── */}
+          {/* ✦ FIX: No `mode="wait"`, and `isLoading` / `isAutoCategorizing` are NOT
+                    part of the key. MainContent already switches between skeleton
+                    and real content internally, so the wrapper only needs to
+                    re-key when the VIEW changes. Previously the key flipped
+                    topic → auto-skeleton → topic while the main thread was blocked,
+                    which left AnimatePresence stuck on the skeleton child. */}
+          <AnimatePresence initial={false}>
+            <motion.div
+              key={
+                logic.showPrivate ? "private" :
+                logic.showDuplicates ? "dupes" :
+                logic.showForgotten ? "forgotten" :
+                logic.showBroken ? "broken" :
+                logic.showUnverifiable ? "unverified" :
+                logic.groupMode
+              }
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, position: "absolute", pointerEvents: "none" }}
+              transition={{ duration: 0.15 }}
+            >
+              {MainContent}
+            </motion.div>
+          </AnimatePresence>
+
+        </div>
+
+        {/* ── System panel ────────────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {showSystemModal && (
+            <SystemPanel
+              isOpen={showSystemModal}
+              onClose={() => setShowSystemModal(false)}
+              theme={theme}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* ── Updates panel ───────────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {showUpdatesModal && (
+            <UpdatesPanel
+              isOpen={showUpdatesModal}
+              onClose={() => setShowUpdatesModal(false)}
+              theme={theme}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* ── Slash hint ──────────────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {showSlashHint && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.18 }}
+              className="wisp-hint"
+            >
+              Press <span className="key">/</span> to jump to search
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* ── Main content ─────────────────────────────────────────────────── */}
-        {MainContent}
+        {/* ── Scroll to top ───────────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {showScrollTop && (
+            <motion.button
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.18 }}
+              whileHover={{ y: -2 }}
+              whileTap={{ y: 0 }}
+              onClick={scrollToSearch}
+              title="Back to search"
+              aria-label="Scroll to search"
+              className="wisp-scrolltop"
+            >
+              ↑
+            </motion.button>
+          )}
+        </AnimatePresence>
 
       </div>
-
-      {/* ── System panel ────────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showSystemModal && (
-          <SystemPanel
-            isOpen={showSystemModal}
-            onClose={() => setShowSystemModal(false)}
-            theme={theme}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── Updates panel ───────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showUpdatesModal && (
-          <UpdatesPanel
-            isOpen={showUpdatesModal}
-            onClose={() => setShowUpdatesModal(false)}
-            theme={theme}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* ── Slash hint ──────────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showSlashHint && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.18 }}
-            className="wisp-hint"
-          >
-            Press <span className="key">/</span> to jump to search
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Scroll to top ───────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showScrollTop && (
-          <motion.button
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.18 }}
-            whileHover={{ y: -2 }}
-            whileTap={{ y: 0 }}
-            onClick={scrollToSearch}
-            title="Back to search"
-            aria-label="Scroll to search"
-            className="wisp-scrolltop"
-          >
-            ↑
-          </motion.button>
-        )}
-      </AnimatePresence>
-
-    </div>
+    </HealthContext.Provider>
   )
   //#endregion
 }
@@ -1166,9 +1325,6 @@ const YorhaPill = React.memo(function YorhaPill({
 }) {
   const color = accent || "var(--text-primary)"
 
-  // When active we want the "inverted" look: pill takes accent color as bg,
-  // and text/border reads as the page bg. We publish accent as a CSS var so
-  // the stylesheet can style children (like the count chip) with the same color.
   const styleVars: React.CSSProperties = active
     ? ({
         ["--pill-accent" as any]: color,
@@ -1231,8 +1387,9 @@ function CardActionButton({
 
 //#region ─── ForgottenView ────────────────────────────────────────────────────
 
-const ForgottenView = React.memo(function ForgottenView({ bookmarks, visits, health, months, onOpen }: {
-  bookmarks: any[]; visits: VisitStore; health: HealthStore; months: number
+// ✦ FIX: No `health` prop — BookmarkCard pulls it from context.
+const ForgottenView = React.memo(function ForgottenView({ bookmarks, visits, months, onOpen }: {
+  bookmarks: any[]; visits: VisitStore; months: number
   onOpen: (id: string, url: string) => void
   allCategories?: string[]
   onAssignCategory?: (id: string, cat: string) => void
@@ -1263,7 +1420,6 @@ const ForgottenView = React.memo(function ForgottenView({ bookmarks, visits, hea
             key={b.id}
             bookmark={b}
             visits={visits}
-            health={health}
             onOpen={onOpen}
             index={i}
             accent="amber"
@@ -1290,6 +1446,9 @@ const BrokenView = React.memo(function BrokenView({
   onDeleteBookmarks: (id: string) => void
   disableFavicon?: boolean
 }) {
+  // ✦ FIX: These per-card health maps are now built once per view, and the
+  //        cards pull them from context. No more health-store churn during
+  //        a broken-link scan.
   const deadHealth: HealthStore = useMemo(() => {
     const h: HealthStore = {}
     for (const b of bookmarks) h[b.url] = { status: "dead", checkedAt: Date.now() }
@@ -1354,39 +1513,43 @@ const BrokenView = React.memo(function BrokenView({
               </motion.button>
             </div>
           </div>
-          <div className="wisp-viewgrid">
-            {bookmarks.map((b, i) => (
-              <BookmarkCard
-                key={b.id}
-                bookmark={b}
-                visits={visits}
-                health={deadHealth}
-                onOpen={onOpen}
-                index={i}
-                accent="rust"
-                actions={
-                  <>
-                    <CardActionButton
-                      variant="sage"
-                      title="Mark this link as working — it will be removed from Severed."
-                      onClick={() => onMarkWorking(b.url)}
-                    >
-                      ✓ Working
-                    </CardActionButton>
-                    <CardActionButton
-                      variant="rust"
-                      title="Delete this bookmark permanently."
-                      onClick={() => {
-                        if (confirm(`Delete "${b.title || b.url}"?`)) onDeleteBookmarks(b.id)
-                      }}
-                    >
-                      ⌫ Delete
-                    </CardActionButton>
-                  </>
-                }
-              />
-            ))}
-          </div>
+          {/* ✦ FIX: Wrap the grid in a HealthContext provider scoped to just
+                    the dead links so the cards can read status without us
+                    passing the store through props. */}
+          <HealthContext.Provider value={deadHealth}>
+            <div className="wisp-viewgrid">
+              {bookmarks.map((b, i) => (
+                <BookmarkCard
+                  key={b.id}
+                  bookmark={b}
+                  visits={visits}
+                  onOpen={onOpen}
+                  index={i}
+                  accent="rust"
+                  actions={
+                    <>
+                      <CardActionButton
+                        variant="sage"
+                        title="Mark this link as working — it will be removed from Severed."
+                        onClick={() => onMarkWorking(b.url)}
+                      >
+                        ✓ Working
+                      </CardActionButton>
+                      <CardActionButton
+                        variant="rust"
+                        title="Delete this bookmark permanently."
+                        onClick={() => {
+                          if (confirm(`Delete "${b.title || b.url}"?`)) onDeleteBookmarks(b.id)
+                        }}
+                      >
+                        ⌫ Delete
+                      </CardActionButton>
+                    </>
+                  }
+                />
+              ))}
+            </div>
+          </HealthContext.Provider>
         </div>
       )}
 
@@ -1414,47 +1577,48 @@ const BrokenView = React.memo(function BrokenView({
               </motion.button>
             </div>
           </div>
-          <div className="wisp-viewgrid">
-            {unverifiable.map((b, i) => (
-              <BookmarkCard
-                key={b.id}
-                bookmark={b}
-                visits={visits}
-                health={unverifiableHealth}
-                onOpen={onOpen}
-                index={i}
-                accent="amber"
-                disableFaviconLoad={disableFavicon}
-                actions={
-                  <>
-                    <CardActionButton
-                      variant="sage"
-                      title="Mark this link as working — it will be removed from Unverified."
-                      onClick={() => onMarkWorking(b.url)}
-                    >
-                      ✓ Working
-                    </CardActionButton>
-                    <CardActionButton
-                      variant="rust"
-                      title="Mark this link as broken — it will move to Severed."
-                      onClick={() => onMarkBroken(b.url)}
-                    >
-                      ✕ Broken
-                    </CardActionButton>
-                    <CardActionButton
-                      variant="dim"
-                      title="Delete this bookmark permanently."
-                      onClick={() => {
-                        if (confirm(`Delete "${b.title || b.url}"?`)) onDeleteBookmarks(b.id)
-                      }}
-                    >
-                      ⌫ Delete
-                    </CardActionButton>
-                  </>
-                }
-              />
-            ))}
-          </div>
+          <HealthContext.Provider value={unverifiableHealth}>
+            <div className="wisp-viewgrid">
+              {unverifiable.map((b, i) => (
+                <BookmarkCard
+                  key={b.id}
+                  bookmark={b}
+                  visits={visits}
+                  onOpen={onOpen}
+                  index={i}
+                  accent="amber"
+                  disableFaviconLoad={disableFavicon}
+                  actions={
+                    <>
+                      <CardActionButton
+                        variant="sage"
+                        title="Mark this link as working — it will be removed from Unverified."
+                        onClick={() => onMarkWorking(b.url)}
+                      >
+                        ✓ Working
+                      </CardActionButton>
+                      <CardActionButton
+                        variant="rust"
+                        title="Mark this link as broken — it will move to Severed."
+                        onClick={() => onMarkBroken(b.url)}
+                      >
+                        ✕ Broken
+                      </CardActionButton>
+                      <CardActionButton
+                        variant="dim"
+                        title="Delete this bookmark permanently."
+                        onClick={() => {
+                          if (confirm(`Delete "${b.title || b.url}"?`)) onDeleteBookmarks(b.id)
+                        }}
+                      >
+                        ⌫ Delete
+                      </CardActionButton>
+                    </>
+                  }
+                />
+              ))}
+            </div>
+          </HealthContext.Provider>
         </div>
       )}
     </div>
@@ -1465,10 +1629,10 @@ const BrokenView = React.memo(function BrokenView({
 //#region ─── Compact BookmarkCard (ForgottenView / BrokenView) ────────────────
 
 const BookmarkCard = React.memo(function BookmarkCard({
-  bookmark: b, visits, health, onOpen, accent = "amber", index = 0,
+  bookmark: b, visits, onOpen, accent = "amber", index = 0,
   actions, disableFaviconLoad,
 }: {
-  bookmark: any; visits: VisitStore; health: HealthStore
+  bookmark: any; visits: VisitStore
   onOpen: (id: string, url: string) => void
   accent?: "amber" | "rust" | "sage"
   index?: number
@@ -1478,20 +1642,32 @@ const BookmarkCard = React.memo(function BookmarkCard({
   const [favicon, setFavicon] = useState<string | null>(null)
   const lastVisit = visits[b.id]
   const addedAgo = b.date ? relativeTime(b.date) : null
+  // ✦ FIX: Pull health from context instead of a prop, so this card doesn't
+  //        force its parent to re-render when the health store updates.
+  const health = useHealth()
   const dot = statusDot(health[b.url]?.status)
   const domain = (() => { try { return new URL(b.url).hostname.replace("www.", "") } catch { return "" } })()
 
+  // ✦ FIX: Stagger favicon loads so 1000+ cards don't all hit the helper
+  //        at the same time on mount. Uses `index` (stable, provided by
+  //        the parent's .map) to spread requests out over ~2s.
   useEffect(() => {
     if (disableFaviconLoad || !domain) {
       setFavicon(null)
       return
     }
     let cancelled = false
-    Promise.resolve(loadFavicon(domain))
-      .then((url) => { if (!cancelled) setFavicon(url || null) })
-      .catch(() => { if (!cancelled) setFavicon(null) })
-    return () => { cancelled = true }
-  }, [domain, disableFaviconLoad])
+    const delay = Math.min(index * 8, 2000)
+    const t = window.setTimeout(() => {
+      Promise.resolve(loadFavicon(domain))
+        .then((url) => { if (!cancelled) setFavicon(url || null) })
+        .catch(() => { if (!cancelled) setFavicon(null) })
+    }, delay)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [domain, disableFaviconLoad, index])
 
   return (
     <div
