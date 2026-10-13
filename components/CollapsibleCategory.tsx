@@ -6,10 +6,9 @@ import { useTheme } from '../scripts/themeProvider'
 import { loadFavicon } from "~scripts/faviconHelper"
 import QRScreenModal from "./qrScreenModal"
 
-//#region ─── style design  ─────────
+//#region ─── style design (modals only, they render rarely) ─────────
 function getThemeColors(theme: string) {
   const isDark = theme === "dark" || theme === "high-contrast-dark"
-
   return {
     bg: isDark ? "#1a1a17" : "#e8e4d8",
     bgPanel: isDark ? "#242420" : "#ddd8c8",
@@ -24,7 +23,6 @@ function getThemeColors(theme: string) {
     mono: "'JetBrains Mono', 'Courier New', monospace",
   }
 }
-
 //#endregion
 
 interface Bookmark {
@@ -54,20 +52,6 @@ interface CollapsibleCategoryProps {
 
 //#region ─── Shared Icons ────────────
 
-const LockIcon = ({ size = 14 }: { size?: number }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ pointerEvents: "none" }}>
-    <rect x="3" y="11" width="18" height="11" rx="0" ry="0"></rect>
-    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-  </svg>
-)
-
-const UnlockIcon = ({ size = 14 }: { size?: number }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ pointerEvents: "none" }}>
-    <rect x="3" y="11" width="18" height="11" rx="0" ry="0"></rect>
-    <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
-  </svg>
-)
-
 const ShareIcon = ({ size = 14 }: { size?: number }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ pointerEvents: "none" }}>
     <circle cx="18" cy="5" r="3"></circle>
@@ -77,7 +61,6 @@ const ShareIcon = ({ size = 14 }: { size?: number }) => (
     <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
   </svg>
 )
-
 //#endregion
 
 //#region ─── Folder Icon with Favicons ─────────────
@@ -85,11 +68,9 @@ const ShareIcon = ({ size = 14 }: { size?: number }) => (
 const FolderIcon = ({
   bookmarks,
   icon,
-  colors
 }: {
-  bookmarks: Bookmark[],
-  icon?: string,
-  colors: ReturnType<typeof getThemeColors>
+  bookmarks: Bookmark[]
+  icon?: string
 }) => {
   const [faviconDataUrls, setFaviconDataUrls] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -98,36 +79,19 @@ const FolderIcon = ({
     let isMounted = true
 
     const loadFavicons = async () => {
-      if (bookmarks.length === 0) {
-        setLoading(false)
-        return
-      }
+      if (bookmarks.length === 0) { setLoading(false); return }
 
       const domains = bookmarks
-        .map(b => {
-          try {
-            return new URL(b.url).hostname
-          } catch {
-            return null
-          }
-        })
+        .map(b => { try { return new URL(b.url).hostname } catch { return null } })
         .filter((d): d is string => d !== null)
         .filter((d, i, arr) => arr.indexOf(d) === i)
         .slice(0, 4)
 
-      if (domains.length === 0) {
-        setLoading(false)
-        return
-      }
+      if (domains.length === 0) { setLoading(false); return }
 
       try {
-        const results = await Promise.all(
-          domains.map(domain => loadFavicon(domain))
-        )
-        if (isMounted) {
-          setFaviconDataUrls(results)
-          setLoading(false)
-        }
+        const results = await Promise.all(domains.map(domain => loadFavicon(domain)))
+        if (isMounted) { setFaviconDataUrls(results); setLoading(false) }
       } catch (error) {
         if (isMounted) {
           console.error('Failed to load folder favicons:', error)
@@ -137,48 +101,21 @@ const FolderIcon = ({
     }
 
     loadFavicons()
-
-    return () => {
-      isMounted = false
-    }
+    return () => { isMounted = false }
   }, [bookmarks])
 
   const showFallback = loading || faviconDataUrls.length === 0 || faviconDataUrls.every(url => !url)
 
   return (
-    <div style={{
-      width: 44, height: 44, flexShrink: 0,
-      border: `1px solid ${colors.lineFaint}`,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      overflow: "hidden", position: "relative",
-      background: colors.bg,
-      transition: "border-color 0.3s, background-color 0.3s",
-    }}>
+    <div className="wisp-folder">
       {showFallback ? (
-        <span style={{ fontSize: "20px" }}>{icon || "📁"}</span>
+        <span className="wisp-folder__emoji">{icon || "📁"}</span>
       ) : faviconDataUrls.length === 1 ? (
-        <img
-          src={faviconDataUrls[0]}
-          style={{ width: 28, height: 28, objectFit: "contain" }}
-          alt=""
-        />
+        <img className="wisp-folder__single" src={faviconDataUrls[0]} alt="" />
       ) : (
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "2px",
-          padding: "4px",
-          width: "100%",
-          height: "100%",
-          boxSizing: "border-box"
-        }}>
+        <div className="wisp-folder__grid">
           {faviconDataUrls.map((src, i) => (
-            <img
-              key={i}
-              src={src}
-              style={{ width: "100%", height: "100%", objectFit: "contain" }}
-              alt=""
-            />
+            <img key={i} src={src} alt="" />
           ))}
         </div>
       )}
@@ -203,6 +140,7 @@ function UrlEditModal({
   const [value, setValue] = useState(bookmark.url)
   const inputRef = useRef<HTMLInputElement>(null)
   const colors = getThemeColors(theme || 'light')
+  const isDark = theme === "dark" || theme === "high-contrast-dark"
 
   useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [])
 
@@ -218,9 +156,7 @@ function UrlEditModal({
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, zIndex: 1000,
-        background: theme === "dark" || theme === "high-contrast-dark"
-          ? "rgba(0,0,0,0.7)"
-          : "rgba(22,21,17,0.3)",
+        background: isDark ? "rgba(0,0,0,0.7)" : "rgba(22,21,17,0.3)",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -232,11 +168,8 @@ function UrlEditModal({
           background: colors.bg,
           border: `1px solid ${colors.line}`,
           padding: "28px 32px", width: "520px", maxWidth: "90vw",
-          boxShadow: theme === "dark" || theme === "high-contrast-dark"
-            ? "8px 8px 0 rgba(0,0,0,0.4)"
-            : "8px 8px 0 rgba(22,21,17,0.12)",
+          boxShadow: isDark ? "8px 8px 0 rgba(0,0,0,0.4)" : "8px 8px 0 rgba(22,21,17,0.12)",
           fontFamily: colors.mono,
-          transition: "background-color 0.3s, border-color 0.3s",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
@@ -245,32 +178,18 @@ function UrlEditModal({
             border: `1px solid ${colors.line}`,
             display: "flex", alignItems: "center", justifyContent: "center",
             color: colors.ink,
-            transition: "border-color 0.3s, color 0.3s",
           }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
             </svg>
           </div>
-          <h3 style={{
-            margin: 0,
-            fontSize: "16px",
-            fontWeight: 700,
-            color: colors.ink,
-            letterSpacing: "0.04em",
-            transition: "color 0.3s",
-          }}>
+          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: colors.ink, letterSpacing: "0.04em" }}>
             EDIT URL
           </h3>
         </div>
 
-        <p style={{
-          margin: "0 0 24px",
-          fontSize: "12px",
-          color: colors.dim,
-          letterSpacing: "0.02em",
-          transition: "color 0.3s",
-        }}>
+        <p style={{ margin: "0 0 24px", fontSize: "12px", color: colors.dim, letterSpacing: "0.02em" }}>
           Updating link for <span style={{ color: colors.ink, fontWeight: 600 }}>{bookmark.title || bookmark.url}</span>
         </p>
 
@@ -287,9 +206,7 @@ function UrlEditModal({
             border: `1px solid ${colors.line}`,
             color: colors.ink,
             fontSize: "13px", outline: "none",
-            fontFamily: colors.mono,
-            letterSpacing: "0.02em",
-            transition: "background-color 0.3s, color 0.3s, border-color 0.3s",
+            fontFamily: colors.mono, letterSpacing: "0.02em",
           }}
         />
 
@@ -301,13 +218,8 @@ function UrlEditModal({
               border: `1px solid ${colors.lineFaint}`,
               background: "transparent",
               color: colors.dim,
-              fontSize: "11px",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: colors.mono,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              transition: "all 0.2s ease",
+              fontSize: "11px", fontWeight: 600, cursor: "pointer",
+              fontFamily: colors.mono, letterSpacing: "0.08em", textTransform: "uppercase",
             }}
           >CANCEL</button>
           <button
@@ -318,18 +230,12 @@ function UrlEditModal({
               border: `1px solid ${colors.ink}`,
               background: colors.ink,
               color: colors.bg,
-              fontSize: "11px",
-              fontWeight: 700,
+              fontSize: "11px", fontWeight: 700,
               cursor: (!value.trim() || value.trim() === bookmark.url) ? "default" : "pointer",
-              fontFamily: colors.mono,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              transition: "all 0.2s ease",
+              fontFamily: colors.mono, letterSpacing: "0.08em", textTransform: "uppercase",
               opacity: (!value.trim() || value.trim() === bookmark.url) ? 0.4 : 1,
             }}
-          >
-            SAVE URL
-          </button>
+          >SAVE URL</button>
         </div>
       </div>
     </div>
@@ -353,6 +259,7 @@ function NoteEditModal({
   const [value, setValue] = useState(bookmark.description ?? "")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const colors = getThemeColors(theme || 'light')
+  const isDark = theme === "dark" || theme === "high-contrast-dark"
 
   useEffect(() => { textareaRef.current?.focus() }, [])
 
@@ -366,11 +273,8 @@ function NoteEditModal({
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, zIndex: 1000,
-        background: theme === "dark" || theme === "high-contrast-dark"
-          ? "rgba(0,0,0,0.7)"
-          : "rgba(22,21,17,0.3)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
+        background: isDark ? "rgba(0,0,0,0.7)" : "rgba(22,21,17,0.3)",
+        backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}
     >
@@ -380,11 +284,8 @@ function NoteEditModal({
           background: colors.bg,
           border: `1px solid ${colors.line}`,
           padding: "28px 32px", width: "520px", maxWidth: "90vw",
-          boxShadow: theme === "dark" || theme === "high-contrast-dark"
-            ? "8px 8px 0 rgba(0,0,0,0.4)"
-            : "8px 8px 0 rgba(22,21,17,0.12)",
+          boxShadow: isDark ? "8px 8px 0 rgba(0,0,0,0.4)" : "8px 8px 0 rgba(22,21,17,0.12)",
           fontFamily: colors.mono,
-          transition: "background-color 0.3s, border-color 0.3s",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
@@ -393,31 +294,17 @@ function NoteEditModal({
             border: `1px solid ${colors.line}`,
             display: "flex", alignItems: "center", justifyContent: "center",
             color: colors.ink,
-            transition: "border-color 0.3s, color 0.3s",
           }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
             </svg>
           </div>
-          <h3 style={{
-            margin: 0,
-            fontSize: "16px",
-            fontWeight: 700,
-            color: colors.ink,
-            letterSpacing: "0.04em",
-            transition: "color 0.3s",
-          }}>
+          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: colors.ink, letterSpacing: "0.04em" }}>
             EDIT NOTE
           </h3>
         </div>
 
-        <p style={{
-          margin: "0 0 24px",
-          fontSize: "12px",
-          color: colors.dim,
-          letterSpacing: "0.02em",
-          transition: "color 0.3s",
-        }}>
+        <p style={{ margin: "0 0 24px", fontSize: "12px", color: colors.dim, letterSpacing: "0.02em" }}>
           Adding context to <span style={{ color: colors.ink, fontWeight: 600 }}>{bookmark.title || bookmark.url}</span>
         </p>
 
@@ -435,9 +322,7 @@ function NoteEditModal({
             border: `1px solid ${colors.line}`,
             color: colors.ink,
             fontSize: "13px", outline: "none",
-            fontFamily: colors.mono,
-            letterSpacing: "0.02em", lineHeight: 1.6,
-            transition: "background-color 0.3s, color 0.3s, border-color 0.3s",
+            fontFamily: colors.mono, letterSpacing: "0.02em", lineHeight: 1.6,
           }}
         />
 
@@ -449,13 +334,8 @@ function NoteEditModal({
               border: `1px solid ${colors.lineFaint}`,
               background: "transparent",
               color: colors.dim,
-              fontSize: "11px",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: colors.mono,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              transition: "all 0.2s ease",
+              fontSize: "11px", fontWeight: 600, cursor: "pointer",
+              fontFamily: colors.mono, letterSpacing: "0.08em", textTransform: "uppercase",
             }}
           >CANCEL</button>
           <button
@@ -463,15 +343,9 @@ function NoteEditModal({
             style={{
               padding: "10px 20px",
               border: `1px solid ${colors.ink}`,
-              background: colors.ink,
-              color: colors.bg,
-              fontSize: "11px",
-              fontWeight: 700,
-              cursor: "pointer",
-              fontFamily: colors.mono,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              transition: "all 0.2s ease",
+              background: colors.ink, color: colors.bg,
+              fontSize: "11px", fontWeight: 700, cursor: "pointer",
+              fontFamily: colors.mono, letterSpacing: "0.08em", textTransform: "uppercase",
             }}
           >SAVE NOTE</button>
         </div>
@@ -495,17 +369,15 @@ function DeleteConfirmModal({
   theme?: string
 }) {
   const colors = getThemeColors(theme || 'light')
+  const isDark = theme === "dark" || theme === "high-contrast-dark"
 
   return (
     <div
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, zIndex: 1000,
-        background: theme === "dark" || theme === "high-contrast-dark"
-          ? "rgba(0,0,0,0.7)"
-          : "rgba(22,21,17,0.3)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
+        background: isDark ? "rgba(0,0,0,0.7)" : "rgba(22,21,17,0.3)",
+        backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}
     >
@@ -515,12 +387,8 @@ function DeleteConfirmModal({
           background: colors.bg,
           border: `1px solid ${colors.line}`,
           padding: "32px", width: "400px", maxWidth: "90vw",
-          boxShadow: theme === "dark" || theme === "high-contrast-dark"
-            ? "8px 8px 0 rgba(0,0,0,0.4)"
-            : "8px 8px 0 rgba(22,21,17,0.12)",
-          textAlign: "center",
-          fontFamily: colors.mono,
-          transition: "background-color 0.3s, border-color 0.3s",
+          boxShadow: isDark ? "8px 8px 0 rgba(0,0,0,0.4)" : "8px 8px 0 rgba(22,21,17,0.12)",
+          textAlign: "center", fontFamily: colors.mono,
         }}
       >
         <div style={{
@@ -528,46 +396,22 @@ function DeleteConfirmModal({
           border: `1px solid ${colors.rust}`,
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: "28px", color: colors.rust,
-          transition: "border-color 0.3s, color 0.3s",
-        }}>
-          ✕
-        </div>
-        <h3 style={{
-          margin: "0 0 12px",
-          fontSize: "18px",
-          fontWeight: 700,
-          color: colors.ink,
-          letterSpacing: "0.02em",
-          transition: "color 0.3s",
-        }}>
+        }}>✕</div>
+        <h3 style={{ margin: "0 0 12px", fontSize: "18px", fontWeight: 700, color: colors.ink, letterSpacing: "0.02em" }}>
           DELETE {count} BOOKMARK{count !== 1 ? "S" : ""}?
         </h3>
-        <p style={{
-          margin: "0 0 28px",
-          fontSize: "13px",
-          color: colors.dim,
-          lineHeight: 1.5,
-          letterSpacing: "0.02em",
-          transition: "color 0.3s",
-        }}>
+        <p style={{ margin: "0 0 28px", fontSize: "13px", color: colors.dim, lineHeight: 1.5, letterSpacing: "0.02em" }}>
           This will permanently remove {count === 1 ? "this bookmark" : "these bookmarks"} from the archive. This action cannot be undone.
         </p>
         <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
           <button
             onClick={onClose}
             style={{
-              flex: 1,
-              padding: "10px 20px",
+              flex: 1, padding: "10px 20px",
               border: `1px solid ${colors.lineFaint}`,
-              background: "transparent",
-              color: colors.dim,
-              fontSize: "11px",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: colors.mono,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              transition: "all 0.2s ease",
+              background: "transparent", color: colors.dim,
+              fontSize: "11px", fontWeight: 600, cursor: "pointer",
+              fontFamily: colors.mono, letterSpacing: "0.08em", textTransform: "uppercase",
             }}
           >CANCEL</button>
           <button
@@ -575,15 +419,11 @@ function DeleteConfirmModal({
             style={{
               flex: 1, padding: "10px 16px",
               border: `1px solid ${colors.rust}`,
-              background: colors.rust,
-              color: colors.bg,
+              background: colors.rust, color: colors.bg,
               fontSize: "13px", fontWeight: 700, cursor: "pointer",
               fontFamily: colors.mono, letterSpacing: "0.04em",
-              transition: "background-color 0.3s, color 0.3s, border-color 0.3s",
             }}
-          >
-            DELETE
-          </button>
+          >DELETE</button>
         </div>
       </div>
     </div>
@@ -599,12 +439,12 @@ const MoveMenu = React.forwardRef<HTMLDivElement, {
   count: number
   categories: string[]
   onMove: (cat: string) => void
-  actionBtn: React.CSSProperties
   theme?: string
-}>(({ open, onToggle, count, categories, onMove, actionBtn, theme }, ref) => {
+}>(({ open, onToggle, count, categories, onMove, theme }, ref) => {
   const [query, setQuery] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const colors = getThemeColors(theme || 'light')
+  const isDark = theme === "dark" || theme === "high-contrast-dark"
 
   useEffect(() => {
     if (open) { setQuery(""); setTimeout(() => inputRef.current?.focus(), 50) }
@@ -622,48 +462,32 @@ const MoveMenu = React.forwardRef<HTMLDivElement, {
   return (
     <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
       <button
+        className="wisp-cat__action-btn"
         onClick={(e) => { e.stopPropagation(); onToggle() }}
-        style={actionBtn}
+        style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
       >
         MOVE TO
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: "4px", opacity: 0.7 }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
       </button>
 
       {open && (
         <div style={{
-          position: "absolute",
-          top: "calc(100% + 6px)",
-          right: 0,
+          position: "absolute", top: "calc(100% + 6px)", right: 0,
           background: colors.bg,
           border: `1px solid ${colors.line}`,
-          width: "240px",
-          zIndex: 300,
-          boxShadow: theme === "dark" || theme === "high-contrast-dark"
-            ? "4px 4px 0 rgba(0,0,0,0.4)"
-            : "4px 4px 0 rgba(22,21,17,0.12)",
-          display: "flex",
-          flexDirection: "column",
+          width: "240px", zIndex: 300,
+          boxShadow: isDark ? "4px 4px 0 rgba(0,0,0,0.4)" : "4px 4px 0 rgba(22,21,17,0.12)",
+          display: "flex", flexDirection: "column",
           fontFamily: colors.mono,
-          transition: "background-color 0.3s, border-color 0.3s",
-          maxHeight: "300px",
-          overflow: "hidden",
+          maxHeight: "300px", overflow: "hidden",
         }}>
-          <div style={{
-            padding: "12px",
-            borderBottom: `1px solid ${colors.lineFaint}`,
-            transition: "border-color 0.3s",
-          }}>
+          <div style={{ padding: "12px", borderBottom: `1px solid ${colors.lineFaint}` }}>
             <div style={{
-              fontSize: "10px",
-              color: colors.dim,
-              marginBottom: "10px",
-              paddingLeft: "4px",
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              transition: "color 0.3s",
+              fontSize: "10px", color: colors.dim, marginBottom: "10px",
+              paddingLeft: "4px", fontWeight: 700,
+              letterSpacing: "0.08em", textTransform: "uppercase",
             }}>
               MOVE {count} ITEM{count !== 1 ? "S" : ""}
             </div>
@@ -673,43 +497,27 @@ const MoveMenu = React.forwardRef<HTMLDivElement, {
               onChange={e => setQuery(e.target.value)}
               placeholder="Search folders…"
               style={{
-                width: "100%",
-                boxSizing: "border-box",
+                width: "100%", boxSizing: "border-box",
                 padding: "8px 12px",
                 background: colors.bg,
                 border: `1px solid ${colors.line}`,
                 color: colors.ink,
-                fontSize: "12px",
-                outline: "none",
-                fontFamily: colors.mono,
-                letterSpacing: "0.02em",
-                transition: "background-color 0.3s, color 0.3s, border-color 0.3s",
+                fontSize: "12px", outline: "none",
+                fontFamily: colors.mono, letterSpacing: "0.02em",
               }}
             />
           </div>
 
-          <div style={{
-            overflowY: "auto",
-            maxHeight: "220px",
-            padding: "6px",
-            overscrollBehavior: "contain",
-          }}>
+          <div style={{ overflowY: "auto", maxHeight: "220px", padding: "6px", overscrollBehavior: "contain" }}>
             <button
               onClick={(e) => { e.stopPropagation(); handleMove("") }}
               style={{
-                display: "block",
-                width: "100%",
+                display: "block", width: "100%",
                 padding: "10px 14px",
-                background: "none",
-                border: "none",
-                color: colors.ink,
-                fontSize: "12px",
-                textAlign: "left",
-                cursor: "pointer",
-                fontFamily: colors.mono,
+                background: "none", border: "none",
+                color: colors.ink, fontSize: "12px", textAlign: "left",
+                cursor: "pointer", fontFamily: colors.mono,
                 letterSpacing: "0.04em",
-                borderRadius: "2px",
-                transition: "all 0.15s ease",
               }}
               onMouseEnter={e => { e.currentTarget.style.background = colors.lineFaint }}
               onMouseLeave={e => { e.currentTarget.style.background = "none" }}
@@ -719,12 +527,9 @@ const MoveMenu = React.forwardRef<HTMLDivElement, {
 
             {filtered.length === 0 ? (
               <div style={{
-                padding: "12px",
-                fontSize: "12px",
-                color: colors.dimmer,
-                textAlign: "center",
+                padding: "12px", fontSize: "12px",
+                color: colors.dimmer, textAlign: "center",
                 letterSpacing: "0.02em",
-                transition: "color 0.3s",
               }}>
                 No folders match
               </div>
@@ -734,19 +539,12 @@ const MoveMenu = React.forwardRef<HTMLDivElement, {
                   key={cat}
                   onClick={(e) => { e.stopPropagation(); handleMove(cat) }}
                   style={{
-                    display: "block",
-                    width: "100%",
+                    display: "block", width: "100%",
                     padding: "10px 14px",
-                    background: "none",
-                    border: "none",
-                    color: colors.ink,
-                    fontSize: "12px",
-                    textAlign: "left",
-                    cursor: "pointer",
-                    fontFamily: colors.mono,
+                    background: "none", border: "none",
+                    color: colors.ink, fontSize: "12px", textAlign: "left",
+                    cursor: "pointer", fontFamily: colors.mono,
                     letterSpacing: "0.04em",
-                    borderRadius: "2px",
-                    transition: "all 0.15s ease",
                   }}
                   onMouseEnter={e => { e.currentTarget.style.background = colors.lineFaint }}
                   onMouseLeave={e => { e.currentTarget.style.background = "none" }}
@@ -763,7 +561,6 @@ const MoveMenu = React.forwardRef<HTMLDivElement, {
 })
 
 MoveMenu.displayName = "MoveMenu"
-
 //#endregion
 
 //#region ─── Main Component(CollapsibleCategory) ─────────────
@@ -781,27 +578,24 @@ export default function CollapsibleCategory({
   onUpdateNote,
   onTogglePrivate,
 }: CollapsibleCategoryProps) {
+  // Only used to pass a theme string to modals/portal content. Not read by
+  // the wrapper chrome anymore — CSS vars handle everything.
   const { theme } = useTheme()
-  const colors = getThemeColors(theme)
-  const isDark = theme === "dark" || theme === "high-contrast-dark"
 
-  const [isOpen, setIsOpen]       = useState(defaultOpen)
-  const contentRef                = useRef<HTMLDivElement>(null)
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+  const contentRef = useRef<HTMLDivElement>(null)
   const [contentHeight, setContentHeight] = useState<number | "auto">(defaultOpen ? "auto" : 0)
 
-  // ── Selection state ──────────────────────────────────────────────────────
-  const [selectMode, setSelectMode]   = useState(false)
-  const [selected, setSelected]       = useState<Set<string>>(new Set())
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [moveMenuOpen, setMoveMenuOpen] = useState(false)
   const moveMenuRef = useRef<HTMLDivElement>(null)
 
-  // ── Share state (single-select) ──────────────────────────────────────────
-  const [shareMode, setShareMode]       = useState(false)
-  const [shareTarget, setShareTarget]   = useState<Bookmark | null>(null)
+  const [shareMode, setShareMode] = useState(false)
+  const [shareTarget, setShareTarget] = useState<Bookmark | null>(null)
   const [shareModalOpen, setShareModalOpen] = useState(false)
 
-  // ── Modals ───────────────────────────────────────────────────────────────
-  const [urlEditTarget, setUrlEditTarget]   = useState<Bookmark | null>(null)
+  const [urlEditTarget, setUrlEditTarget] = useState<Bookmark | null>(null)
   const [noteEditTarget, setNoteEditTarget] = useState<Bookmark | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
@@ -847,7 +641,6 @@ export default function CollapsibleCategory({
     if (prevLengthRef.current !== memoizedBookmarks.length) {
       setSelectMode(false)
       setSelected(new Set())
-      // Also drop a share target if the underlying bookmark disappeared
       setShareTarget(prev => prev && memoizedBookmarks.some(b => b.id === prev.id) ? prev : null)
       setShareMode(false)
       prevLengthRef.current = memoizedBookmarks.length
@@ -855,7 +648,7 @@ export default function CollapsibleCategory({
   }, [memoizedBookmarks.length])
 
   const exitSelectMode = () => { setSelectMode(false); setSelected(new Set()) }
-  const exitShareMode  = () => { setShareMode(false); setShareTarget(null) }
+  const exitShareMode = () => { setShareMode(false); setShareTarget(null) }
 
   const toggleSelect = useCallback((id: string) => {
     setSelected(prev => {
@@ -865,7 +658,6 @@ export default function CollapsibleCategory({
     })
   }, [])
 
-  // Single-select: clicking a card replaces the target; clicking the same one clears it.
   const toggleShareTarget = useCallback((bookmark: Bookmark) => {
     setShareTarget(prev => (prev?.id === bookmark.id ? null : bookmark))
   }, [])
@@ -877,8 +669,7 @@ export default function CollapsibleCategory({
 
   const handleMove = useCallback((cat: string) => {
     if (!onAssignCategory) return
-    const ids = Array.from(selected)
-    ids.forEach(id => onAssignCategory(id, cat))
+    Array.from(selected).forEach(id => onAssignCategory(id, cat))
     setMoveMenuOpen(false)
     exitSelectMode()
   }, [onAssignCategory, selected])
@@ -899,47 +690,19 @@ export default function CollapsibleCategory({
     : null
 
   const otherCategories = allCategories.filter(c => c !== categoryName)
-  const allSelected     = selected.size === memoizedBookmarks.length && memoizedBookmarks.length > 0
-  const someSelected    = selected.size > 0
+  const allSelected = selected.size === memoizedBookmarks.length && memoizedBookmarks.length > 0
+  const someSelected = selected.size > 0
 
   const handleTogglePrivate = async (bookmark: Bookmark, e: React.MouseEvent) => {
-    // 🔍 CLICK TRACE — this is the actual click target
-    console.log("[CollapsibleCategory] handleTogglePrivate called", {
-      id: bookmark.id,
-      title: bookmark.title,
-      hasHandler: typeof onTogglePrivate === "function",
-    })
-
     e.stopPropagation()
-
-    if (typeof onTogglePrivate !== "function") {
-      console.warn("[CollapsibleCategory] onTogglePrivate was not passed down")
-      return
-    }
-
+    if (typeof onTogglePrivate !== "function") return
     try {
-      const result = await onTogglePrivate(bookmark)
-      console.log("[CollapsibleCategory] onTogglePrivate resolved:", result)
+      await onTogglePrivate(bookmark)
     } catch (err) {
       console.error("[CollapsibleCategory] onTogglePrivate rejected:", err)
     }
   }
 
-  // ─── Action button style ──────────────────────────────────────────────────
-  const actionBtnStyle: React.CSSProperties = {
-    padding: "8px 12px",
-    border: "none",
-    background: "transparent",
-    color: colors.ink,
-    fontSize: "10px",
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
-    cursor: "pointer",
-    fontFamily: colors.mono,
-    transition: "all 0.2s ease",
-  }
-
-  // ─── Card highlight rules ─────────────────────────────────────────────────
   const isBookmarkSelected = (id: string) =>
     selectMode ? selected.has(id) : shareMode ? shareTarget?.id === id : false
 
@@ -947,7 +710,7 @@ export default function CollapsibleCategory({
 
   return (
     <>
-      {/* ── Modals rendered via portal to escape ancestor stacking contexts ── */}
+      {/* ── Modals (portals) ── */}
       {urlEditTarget && onUpdateUrl && createPortal(
         <UrlEditModal
           bookmark={urlEditTarget}
@@ -987,82 +750,47 @@ export default function CollapsibleCategory({
         document.body
       )}
 
-      <div
-        style={{
-          marginBottom: "24px",
-          background: colors.bg,
-          border: `1px solid ${anyModeActive ? colors.ink : colors.lineFaint}`,
-          overflow: "visible",
-          fontFamily: colors.mono,
-          position: "relative",
-          boxShadow: anyModeActive ? (isDark ? "4px 4px 0 rgba(0,0,0,0.4)" : "4px 4px 0 rgba(22,21,17,0.08)") : "none",
-          transition: "background-color 0.3s, border-color 0.3s, box-shadow 0.3s",
-        }}
-      >
-        {/* ── Corner accent ─────────────────────────────────────────────────── */}
-        <div style={{
-          position: "absolute", left: 0, top: 0, bottom: 0, width: "3px",
-          background: isOpen ? colors.ink : colors.dimmer,
-          opacity: isOpen ? 1 : 0.3,
-          transition: "opacity 0.4s ease, background-color 0.3s",
-          zIndex: 1,
-          pointerEvents: "none",
-        }} />
+      {/* ── Category wrapper — all chrome via CSS vars ── */}
+      <div className={`wisp-cat${isOpen ? " is-open" : ""}${anyModeActive ? " is-active-mode" : ""}`}>
+        <div className="wisp-cat__accent" />
 
-        {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div style={{
-          padding: "20px 24px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          cursor: "pointer", userSelect: "none",
-          background: isOpen ? colors.bgPanel : colors.bg,
-          borderBottom: isOpen ? `1px solid ${colors.lineFaint}` : "1px solid transparent",
-          transition: "background 0.3s ease, border-color 0.3s ease",
-          position: "relative",
-          zIndex: 2,
-        }}>
-
+        {/* ── Header ── */}
+        <div className="wisp-cat__header">
           {/* Left: icon + title */}
-          <div onClick={() => !anyModeActive && setIsOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: "16px", flex: 1, minWidth: 0 }}>
-            <FolderIcon bookmarks={memoizedBookmarks} icon={icon} colors={colors} />
+          <div
+            className="wisp-cat__header-left"
+            onClick={() => !anyModeActive && setIsOpen(o => !o)}
+          >
+            <FolderIcon bookmarks={memoizedBookmarks} icon={icon} />
 
-            <div style={{ minWidth: 0 }}>
-              <h2 style={{
-                margin: 0,
-                fontSize: "15px",
-                fontWeight: 700,
-                color: colors.ink,
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                transition: "color 0.3s",
-              }}>
-                {title}
-              </h2>
-              <p style={{
-                margin: "4px 0 0",
-                fontSize: "11px",
-                color: colors.dim,
-                letterSpacing: "0.04em",
-                transition: "color 0.3s",
-              }}>
-                {selectMode && someSelected
-                  ? <span style={{ color: colors.amber, fontWeight: 700 }}>{selected.size} OF {memoizedBookmarks.length} SELECTED</span>
-                  : shareMode
-                    ? (shareTarget
-                        ? <span style={{ color: colors.amber, fontWeight: 700 }}>SHARE: {shareTarget.title || shareTarget.url}</span>
-                        : <span style={{ color: colors.amber, fontWeight: 700 }}>PICK ONE TO SHARE</span>)
-                    : <>{memoizedBookmarks.length} {memoizedBookmarks.length === 1 ? "ENTRY" : "ENTRIES"}</>
-                }
+            <div className="wisp-cat__title-block">
+              <h2 className="wisp-cat__title">{title}</h2>
+              <p className="wisp-cat__subtitle">
+                {selectMode && someSelected ? (
+                  <span className="highlight">
+                    {selected.size} OF {memoizedBookmarks.length} SELECTED
+                  </span>
+                ) : shareMode ? (
+                  shareTarget ? (
+                    <span className="highlight">SHARE: {shareTarget.title || shareTarget.url}</span>
+                  ) : (
+                    <span className="highlight">PICK ONE TO SHARE</span>
+                  )
+                ) : (
+                  <>
+                    {memoizedBookmarks.length} {memoizedBookmarks.length === 1 ? "ENTRY" : "ENTRIES"}
+                  </>
+                )}
               </p>
             </div>
           </div>
 
           {/* Right: actions */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "16px" }}>
+          <div className="wisp-cat__actions">
             {!anyModeActive ? (
               <>
-                {/* SHARE — single-select share flow */}
                 <button
+                  className="wisp-cat__btn"
                   onClick={e => {
                     e.stopPropagation()
                     setSelectMode(false)
@@ -1072,33 +800,13 @@ export default function CollapsibleCategory({
                     setIsOpen(true)
                   }}
                   title="Pick one bookmark to share as a QR code"
-                  style={{
-                    display: "flex", alignItems: "center", gap: "6px",
-                    padding: "8px 14px",
-                    border: `1px solid ${colors.line}`,
-                    background: "transparent",
-                    color: colors.ink,
-                    fontSize: "10px",
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                    cursor: "pointer",
-                    fontFamily: colors.mono,
-                    transition: "all 0.2s ease",
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = colors.ink
-                    e.currentTarget.style.color = colors.bg
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = "transparent"
-                    e.currentTarget.style.color = colors.ink
-                  }}
                 >
                   <ShareIcon size={12} />
                   SHARE
                 </button>
 
                 <button
+                  className="wisp-cat__btn"
                   onClick={e => {
                     e.stopPropagation()
                     setShareMode(false)
@@ -1106,64 +814,24 @@ export default function CollapsibleCategory({
                     setSelectMode(true)
                     setIsOpen(true)
                   }}
-                  style={{
-                    padding: "8px 14px",
-                    border: `1px solid ${colors.line}`,
-                    background: "transparent",
-                    color: colors.ink,
-                    fontSize: "10px",
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                    cursor: "pointer",
-                    fontFamily: colors.mono,
-                    transition: "all 0.2s ease",
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = colors.ink
-                    e.currentTarget.style.color = colors.bg
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = "transparent"
-                    e.currentTarget.style.color = colors.ink
-                  }}
                 >
                   SELECT
                 </button>
 
-                <div
-                  onClick={() => setIsOpen(o => !o)}
-                  style={{
-                    width: 32, height: 32,
-                    cursor: "pointer",
-                    border: `1px solid ${isOpen ? colors.line : "transparent"}`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    transition: "all 0.2s ease",
-                    background: isOpen ? colors.bgPanel : "transparent",
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = colors.line }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = isOpen ? colors.line : "transparent" }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}>
-                    <path d="M3 5L7 9L11 5" stroke={isOpen ? colors.ink : colors.dim} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <div className="wisp-cat__chev" onClick={() => setIsOpen(o => !o)}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M3 5L7 9L11 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </div>
               </>
             ) : (
-              /* ── Bulk action bar (select mode + share mode share this shell) ── */
-              <div style={{
-                display: "flex", alignItems: "center", gap: "4px",
-                background: colors.bgPanel,
-                padding: "4px",
-                border: `1px solid ${colors.lineFaint}`,
-                transition: "background-color 0.3s, border-color 0.3s",
-              }} onClick={e => e.stopPropagation()}>
-
+              <div className="wisp-cat__bulk" onClick={e => e.stopPropagation()}>
                 {selectMode && (
                   <>
-                    <button onClick={toggleAll} style={actionBtnStyle}>
+                    <button className="wisp-cat__action-btn" onClick={toggleAll}>
                       {allSelected ? "DESELECT ALL" : "SELECT ALL"}
                     </button>
-                    {someSelected && <div style={{ width: "1px", height: "16px", background: colors.lineFaint, margin: "0 2px", transition: "background-color 0.3s" }} />}
+                    {someSelected && <div className="wisp-cat__divider" />}
                   </>
                 )}
 
@@ -1177,43 +845,36 @@ export default function CollapsibleCategory({
                         count={selected.size}
                         categories={otherCategories}
                         onMove={handleMove}
-                        actionBtn={actionBtnStyle}
                         theme={theme}
                       />
                     )}
-                    {onUpdateUrl && singleSelected && <button onClick={() => setUrlEditTarget(singleSelected)} style={actionBtnStyle}>EDIT URL</button>}
-                    {onUpdateNote && singleSelected && <button onClick={() => setNoteEditTarget(singleSelected)} style={actionBtnStyle}>EDIT NOTE</button>}
+                    {onUpdateUrl && singleSelected && (
+                      <button className="wisp-cat__action-btn" onClick={() => setUrlEditTarget(singleSelected)}>
+                        EDIT URL
+                      </button>
+                    )}
+                    {onUpdateNote && singleSelected && (
+                      <button className="wisp-cat__action-btn" onClick={() => setNoteEditTarget(singleSelected)}>
+                        EDIT NOTE
+                      </button>
+                    )}
                     {onDeleteBookmarks && (
-                      <button onClick={() => setShowDeleteConfirm(true)} style={{ ...actionBtnStyle, color: colors.rust }}>DELETE</button>
+                      <button className="wisp-cat__action-btn danger" onClick={() => setShowDeleteConfirm(true)}>
+                        DELETE
+                      </button>
                     )}
                   </>
                 )}
 
                 {shareMode && (
                   <>
-                    <span style={{
-                      padding: "8px 10px",
-                      fontSize: "10px",
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      color: colors.dim,
-                      fontFamily: colors.mono,
-                    }}>
+                    <span className="wisp-cat__action-btn" style={{ cursor: "default" }}>
                       {shareTarget ? "1 SELECTED" : "SELECT 1"}
                     </span>
                     <button
+                      className={`wisp-cat__share-btn${shareTarget ? " is-ready" : ""}`}
                       onClick={handleOpenShare}
                       disabled={!shareTarget}
-                      style={{
-                        ...actionBtnStyle,
-                        padding: "8px 14px",
-                        border: `1px solid ${shareTarget ? colors.ink : colors.lineFaint}`,
-                        background: shareTarget ? colors.ink : "transparent",
-                        color: shareTarget ? colors.bg : colors.dimmer,
-                        fontWeight: 700,
-                        cursor: shareTarget ? "pointer" : "default",
-                        display: "flex", alignItems: "center", gap: "6px",
-                      }}
                     >
                       <ShareIcon size={11} />
                       SHARE
@@ -1221,20 +882,24 @@ export default function CollapsibleCategory({
                   </>
                 )}
 
-                <div style={{ width: "1px", height: "16px", background: colors.lineFaint, margin: "0 2px", transition: "background-color 0.3s" }} />
+                <div className="wisp-cat__divider" />
                 <button
+                  className="wisp-cat__action-btn"
                   onClick={() => { exitSelectMode(); exitShareMode() }}
                   title="Cancel"
-                  style={{ ...actionBtnStyle, padding: "8px", display: "flex" }}
+                  style={{ padding: "8px", display: "flex" }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* ── Animated content ──────────────────────────────────────────────── */}
+        {/* ── Animated content ── */}
         <div
           ref={contentRef}
           style={{
@@ -1247,64 +912,33 @@ export default function CollapsibleCategory({
         >
           <div style={{ padding: "24px" }}>
             {memoizedBookmarks.length > 0 ? (
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-                gap: "16px",
-              }}>
+              <div className="wisp-cat__grid">
                 {memoizedBookmarks.map(bookmark => {
-                  const selected = isBookmarkSelected(bookmark.id)
+                  const isSel = isBookmarkSelected(bookmark.id)
                   return (
                     <div
                       key={bookmark.id}
+                      className={`wisp-bm-wrap${anyModeActive ? " selectable" : ""}${isSel ? " is-selected" : ""}`}
                       onClick={() => {
                         if (selectMode) toggleSelect(bookmark.id)
                         else if (shareMode) toggleShareTarget(bookmark)
                       }}
-                      style={{
-                        position: "relative",
-                        isolation: "isolate",
-                        cursor: anyModeActive ? "pointer" : "default",
-                        border: selected
-                          ? `2px solid ${colors.ink}`
-                          : "2px solid transparent",
-                        transition: "border 0.2s ease",
-                      }}
                     >
-                      {/* Selection / share checkbox overlay */}
                       {anyModeActive && (
-                        <div style={{
-                          position: "absolute", top: "12px", left: "12px", zIndex: 30,
-                          width: "22px", height: "22px",
-                          border: `2px solid ${selected ? colors.ink : colors.dimmer}`,
-                          background: selected ? colors.ink : "transparent",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          transition: "all 0.2s ease", pointerEvents: "none",
-                          // In share mode, use a rounded indicator to signal single-select
-                          borderRadius: shareMode ? "50%" : "0",
-                        }}>
-                          {selected && (
+                        <div className={`wisp-bm-wrap__check${isSel ? " is-on" : ""}${shareMode ? " rounded" : ""}`}>
+                          {isSel && (
                             shareMode ? (
-                              <span style={{
-                                width: "8px", height: "8px", borderRadius: "50%",
-                                background: colors.bg,
-                              }} />
+                              <span className="dot" />
                             ) : (
                               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                                <path d="M2.5 6L5 8.5L9.5 3.5" stroke={colors.bg} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                             )
                           )}
                         </div>
                       )}
 
-                      {anyModeActive && !selected && (
-                        <div style={{
-                          position: "absolute", inset: 0,
-                          background: isDark ? "rgba(232,228,216,0.04)" : "rgba(22,21,17,0.04)",
-                          zIndex: 5, pointerEvents: "none"
-                        }} />
-                      )}
+                      {anyModeActive && !isSel && <div className="wisp-bm-wrap__dim" />}
 
                       <BookmarkCard
                         title={bookmark.title}
@@ -1319,36 +953,10 @@ export default function CollapsibleCategory({
                 })}
               </div>
             ) : (
-              <div style={{ textAlign: "center", padding: "48px 20px" }}>
-                <div style={{
-                  width: 64, height: 64, margin: "0 auto 16px",
-                  border: `1px solid ${colors.lineFaint}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "28px", color: colors.dimmer,
-                  transition: "border-color 0.3s, color 0.3s",
-                }}>
-                  ◈
-                </div>
-                <p style={{
-                  margin: 0,
-                  fontSize: "13px",
-                  color: colors.dim,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
-                  fontWeight: 600,
-                  transition: "color 0.3s",
-                }}>
-                  No entries here
-                </p>
-                <p style={{
-                  margin: "4px 0 0",
-                  fontSize: "11px",
-                  color: colors.dimmer,
-                  letterSpacing: "0.02em",
-                  transition: "color 0.3s",
-                }}>
-                  Save some links to see them in this folder.
-                </p>
+              <div className="wisp-cat__empty">
+                <div className="wisp-cat__empty-icon">◈</div>
+                <p className="wisp-cat__empty-title">No entries here</p>
+                <p className="wisp-cat__empty-sub">Save some links to see them in this folder.</p>
               </div>
             )}
           </div>
