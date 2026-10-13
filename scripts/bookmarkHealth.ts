@@ -94,18 +94,12 @@ export async function checkAllUrls(
   const eligible = bookmarks.filter(b =>
     b.url.startsWith("http://") || b.url.startsWith("https://")
   )
-
   const toCheck = onlyStaleOrMissing
     ? eligible.filter(b => isStale(store[b.url]))
     : eligible
 
-  let done = 0
   const total = toCheck.length
-
-  if (total === 0) {
-    onProgress({ ...store }, 0, 0)
-    return store
-  }
+  if (total === 0) { onProgress({ ...store }, 0, 0); return store }
 
   for (const b of toCheck) {
     store[b.url] = { ...(store[b.url] ?? {}), status: "pending", checkedAt: Date.now() }
@@ -113,19 +107,31 @@ export async function checkAllUrls(
   await saveHealth(store)
   onProgress({ ...store }, 0, total)
 
+  let done = 0
+  let sinceLastSave = 0
+  const SAVE_EVERY = 25          // was: every chunk
+  const PROGRESS_EVERY = 10      // was: every URL
+
   for (let i = 0; i < toCheck.length; i += concurrency) {
     const chunk = toCheck.slice(i, i + concurrency)
-    await Promise.all(
-      chunk.map(async b => {
-        const record = await checkUrl(b.url)
-        store[b.url] = record
-        done++
-        onProgress({ ...store }, done, total)
-      })
-    )
-    await saveHealth(store)
+    await Promise.all(chunk.map(async b => {
+      store[b.url] = await checkUrl(b.url)
+      done++
+      sinceLastSave++
+      // throttle React updates
+      if (done % PROGRESS_EVERY === 0 || done === total) {
+        onProgress(store, done, total)   // pass reference, don't clone
+      }
+    }))
+
+    if (sinceLastSave >= SAVE_EVERY) {
+      await saveHealth(store)
+      sinceLastSave = 0
+    }
   }
 
+  await saveHealth(store)
+  onProgress(store, done, total)
   return store
 }
 //#endregion

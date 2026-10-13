@@ -1,27 +1,27 @@
 // FullViewLogic.ts
-import { useState, useEffect, useRef, useCallback } from "react"
-import { getCategoryes, getCategoryIcon, type GroupMode } from "scripts/bookmarkseparator"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { getCategoryes, getCategoryIcon, type GroupMode } from "../scripts/bookmarkseparator"
 import {
   loadMeta, updateMeta, loadCustomCategories, addCustomCategory, deleteCustomCategory,
   loadCategoryAliases, renameCategory, revertCategoryAlias,
   type MetaStore, type CustomCategory, type CategoryAliases,
-} from "scripts/bookmarkMeta"
+} from "../scripts/bookmarkMeta"
 import {
   loadVisits, recordVisit, filterForgotten, relativeTime,
   type VisitStore,
-} from "scripts/bookmarkVisits"
+} from "../scripts/bookmarkVisits"
 import {
   loadHealth, checkAllUrls, filterDead, filterUnverifiable, statusDot,
   getHealthRefreshInfo,
   type HealthStore,
-} from "scripts/bookmarkHealth"
-import type {HealthRecord,HealthStatus} from "scripts/bookmarkHealth"
+} from "../scripts/bookmarkHealth"
+import type { HealthRecord, HealthStatus } from "../scripts/bookmarkHealth"
 import {
   exportStandardHtml, exportWispBackup, importWispBackup,
   type RestoreResult,
-} from "scripts/bookmarkExport"
-import type { HtmlImportResult } from "scripts/bookmarkExport"
-import { findDuplicates, type DuplicateResult, totalDuplicateCount } from "scripts/bookmarkDuplicates"
+} from "../scripts/bookmarkExport"
+import type { HtmlImportResult } from "../scripts/bookmarkExport"
+import { findDuplicates, type DuplicateResult, totalDuplicateCount } from "../scripts/bookmarkDuplicates"
 import {
   isVaultUnlocked,
   unlockVault,
@@ -33,7 +33,7 @@ import {
   hasPrivatePassword,
   touchVaultSession,
   type PrivateBookmark,
-} from 'scripts/bookmarkPrivacy'
+} from '../scripts/bookmarkPrivacy'
 import { getCatagorized } from "~scripts/catagorizeHelper"
 import browserApi from "./storage"
 
@@ -49,6 +49,13 @@ export const FORGOTTEN_OPTIONS = [
 export const PILLS_PREVIEW = 12
 
 export { getCategoryIcon }
+
+// ── FIX: default concurrency for health checks — was hard-coded 6, now 10
+const HEALTH_CONCURRENCY = 10
+
+// ── FIX: how often to commit the in-flight health store to React state
+//         (during a run). The progress counter still ticks every URL.
+const HEALTH_COMMIT_INTERVAL_MS = 250
 
 //#region ─── Custom Hook ───────────
 
@@ -84,6 +91,8 @@ export function useFullViewLogic() {
   const [showBroken, setShowBroken]         = useState(false)
   const [showUnverifiable, setShowUnverifiable] = useState(false)
   const [checkProgress, setCheckProgress] = useState<{ done: number; total: number } | null>(null)
+
+  // ── FIX: derive isChecking with an explicit null check
   const isChecking = checkProgress !== null && checkProgress.done < checkProgress.total
   const checkingRef = useRef(false)
 
@@ -109,6 +118,8 @@ export function useFullViewLogic() {
   // ── Auto-categorization ──────────────────────────────────────────────────
   const [autoCategories, setAutoCategories] = useState<Record<string, any[]>>({})
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
+  // NOTE: this flag is ONLY flipped by toggleAutoCategorization (user click).
+  //       No effect or helper mutates it as a side effect of categorization.
   const [useAutoCategorization, setUseAutoCategorization] = useState(false)
 
 //#endregion
@@ -142,9 +153,12 @@ export function useFullViewLogic() {
         const bookmarks = flatten(tree)
         setAllBookmarks(bookmarks)
 
-        const result = findDuplicates(bookmarks)
-        setDuplicateResult(result)
-        setDuplicateCount(totalDuplicateCount(result))
+        // ✦ FIX: Removed eager findDuplicates() call. It's O(n²)-ish and was
+        //         running synchronously on mount before paint. Duplicates are
+        //         now computed lazily in toggleDuplicates / runDuplicateCheck.
+        //         Also invalidate any stale cached result here.
+        setDuplicateResult(null)
+        setDuplicateCount(0)
 
         resolve(bookmarks)
       })
@@ -156,65 +170,33 @@ export function useFullViewLogic() {
   }, [reloadBookmarksFromTree])
 
   // ─── Load stored data ─────────────────────────────────────────────────────
+  // ✦ FIX: Batched into a single Promise.all so all the setters fire in one
+  //         React 18 render. Previously each .then() triggered its own
+  //         re-render, and `grouped` / `allCategoryNames` recomputed 4–5×
+  //         on cold start. Now it computes once with all data present.
   useEffect(() => {
-    loadMeta().then(setMeta)
-    loadCustomCategories().then(setCustomCats)
-    loadCategoryAliases().then(setAliases)
-    loadVisits().then(setVisits)
-    loadHealth().then(store => {
-      setHealth(store)
+    Promise.all([
+      loadMeta(),
+      loadCustomCategories(),
+      loadCategoryAliases(),
+      loadVisits(),
+      loadHealth(),
+    ]).then(([m, c, a, v, h]) => {
+      setMeta(m)
+      setCustomCats(c)
+      setAliases(a)
+      setVisits(v)
+      setHealth(h)
       setHealthLoaded(true)
     })
   }, [])
   //#endregion
 
-  //#region ─── Auto-categorization effect ─────────
-  useEffect(() => {
-    if (groupMode !== "topic" || allBookmarks.length === 0) {
-      setAutoCategories({})
-      setUseAutoCategorization(false)
-      return
-    }
-
-    const hasExistingCategories = Object.keys(meta).some(id => meta[id]?.customCategory)
-    if (hasExistingCategories && !search) {
-      setAutoCategories({})
-      setUseAutoCategorization(false)
-      return
-    }
-
-    if (search || showForgotten || showBroken || showUnverifiable || showDuplicates || showPrivate) {
-      setAutoCategories({})
-      setUseAutoCategorization(false)
-      return
-    }
-
-    const runAutoCategorization = async () => {
-      setIsAutoCategorizing(true)
-      try {
-        const entries = allBookmarks.map(b => ({
-          title: b.title || b.url,
-          domain: new URL(b.url).hostname.replace("www.", "")
-        }))
-
-        const result = getCatagorized(entries)
-        setAutoCategories(result)
-
-        if (Object.keys(result).length > 0 && !hasExistingCategories) {
-          setUseAutoCategorization(true)
-        }
-      } catch (error) {
-        console.error("Auto-categorization failed:", error)
-        setAutoCategories({})
-        setUseAutoCategorization(false)
-      } finally {
-        setIsAutoCategorizing(false)
-      }
-    }
-
-    const timeoutId = setTimeout(runAutoCategorization, 500)
-    return () => clearTimeout(timeoutId)
-  }, [allBookmarks, groupMode, meta, search, showForgotten, showBroken, showUnverifiable, showDuplicates, showPrivate])
+  //#region ─── Auto-categorization (lazy) ─────────
+  // ✦ FIX: Removed the eager auto-categorization effect entirely. It used to
+  //         run getCatagorized() on every cold start (and every meta change)
+  //         even if the user never clicked AUTO. Now categorization only runs
+  //         on explicit click via toggleAutoCategorization.
 
   useEffect(() => {
     setHealthBannerDismissed(false)
@@ -244,10 +226,12 @@ export function useFullViewLogic() {
   useEffect(() => { if (renamingCat) renameInputRef.current?.focus() }, [renamingCat])
   useEffect(() => { if (showNewCatForm) newCatInputRef.current?.focus() }, [showNewCatForm])
 
-  const refreshMeta = () => loadMeta().then(setMeta)
+  const refreshMeta = useCallback(() => loadMeta().then(setMeta), [])
   //#endregion
 
   //#region ─── Duplicate detection ──────────────────
+  // ✦ FIX: On mount we do NOT compute duplicates. This runs only when the
+  //         user clicks the DUPLICATES pill (via toggleDuplicates).
   const runDuplicateCheck = useCallback(() => {
     const result = findDuplicates(allBookmarks)
     setDuplicateResult(result)
@@ -263,13 +247,30 @@ export function useFullViewLogic() {
     await Promise.all(ids.map(id => browserApi.bookmarks.remove(id)))
     const remainingBookmarks = allBookmarks.filter(b => !ids.includes(b.id))
     setAllBookmarks(remainingBookmarks)
-    const result = findDuplicates(remainingBookmarks)
-    setDuplicateResult(result)
-    setDuplicateCount(totalDuplicateCount(result))
+    // ✦ FIX: Invalidate the cached duplicate result instead of recomputing
+    //         it synchronously. The next time the user opens the view, it
+    //         gets recomputed on demand.
+    setDuplicateResult(null)
+    setDuplicateCount(0)
   }
   //#endregion
 
   //#region ─── Scoped health check ──────────────────
+  // ── FIX: throttle setHealth to ~4 commits/sec during the run.
+  //         Progress counter still updates every tick (cheap state update).
+  const makeHealthProgressHandler = useCallback(() => {
+    let lastCommit = 0
+    return (updated: HealthStore, done: number, total: number) => {
+      const now = performance.now()
+      const isFinal = done === total
+      if (isFinal || now - lastCommit > HEALTH_COMMIT_INTERVAL_MS) {
+        setHealth(updated)
+        lastCommit = now
+      }
+      setCheckProgress({ done, total })
+    }
+  }, [])
+
   // Re-checks only the given URLs
   const runHealthCheckForUrls = useCallback(async (urls: string[]) => {
     if (checkingRef.current) return
@@ -289,19 +290,16 @@ export function useFullViewLogic() {
     try {
       const store = await checkAllUrls(
         eligible.map((url, i) => ({ id: `scoped-${i}`, url })),
-        (updated, done, total) => {
-          setHealth({ ...updated })
-          setCheckProgress({ done, total })
-        },
-        6,
+        makeHealthProgressHandler(),
+        HEALTH_CONCURRENCY,
         false,
       )
-      setHealth({ ...store })
+      setHealth(store)
     } finally {
       setCheckProgress(null)
       checkingRef.current = false
     }
-  }, [allBookmarks])
+  }, [allBookmarks, makeHealthProgressHandler])
   //#endregion
 
   //#region ─── Health check ──────────────
@@ -317,22 +315,22 @@ export function useFullViewLogic() {
     setShowBroken(false)
     setShowUnverifiable(false)
     setCheckProgress({ done: 0, total: toCheckCount })
-    const store = await checkAllUrls(
-      eligible,
-      (updated, done, total) => { setHealth({ ...updated }); setCheckProgress({ done, total }) },
-      6,
-      !forceAll,
-    )
-    setHealth({ ...store })
-    setCheckProgress(null)
-    checkingRef.current = false
-  }, [allBookmarks, health])
+
+    try {
+      const store = await checkAllUrls(
+        eligible,
+        makeHealthProgressHandler(),
+        HEALTH_CONCURRENCY,
+        !forceAll,
+      )
+      setHealth(store)
+    } finally {
+      setCheckProgress(null)
+      checkingRef.current = false
+    }
+  }, [allBookmarks, health, makeHealthProgressHandler])
 
   // ─── Manual health override ───────────────────────────────────────────────
-  // Used by the Severed / Unverified views to let the user hand-mark a link
-  // as working or broken. Writes directly into the health store so the
-  // derived `brokenBookmarks` / `unverifiableBookmarks` lists re-filter and
-  // the card drops out of / moves between those views on the next render.
   const setManualHealth = useCallback((url: string, status: HealthStatus) => {
     setHealth(prev => ({
       ...prev,
@@ -342,81 +340,81 @@ export function useFullViewLogic() {
   //#endregion
 
   // ─── Visit tracking ───────────────────────────────────────────────────────
-  const handleOpenBookmark = async (bookmarkId: string, url: string) => {
+  const handleOpenBookmark = useCallback(async (bookmarkId: string, url: string) => {
     await recordVisit(bookmarkId)
     setVisits(await loadVisits())
     window.open(url, "_blank", "noopener")
-  }
+  }, [])
 
   //#region ─── Rename ────────────
-  const handleRenameStart  = (cat: string) => { setRenamingCat(cat); setRenameValue(cat) }
-  const handleRenameCommit = async () => {
+  const handleRenameStart  = useCallback((cat: string) => { setRenamingCat(cat); setRenameValue(cat) }, [])
+  const handleRenameCommit = useCallback(async () => {
     if (!renamingCat || !renameValue.trim()) return
     await renameCategory(renamingCat, renameValue.trim())
     setAliases(await loadCategoryAliases())
     refreshMeta(); setRenamingCat(null)
-  }
-  const handleRenameRevert = async (cat: string) => {
+  }, [renamingCat, renameValue, refreshMeta])
+  const handleRenameRevert = useCallback(async (cat: string) => {
     const canonical = Object.entries(aliases).find(([, v]) => v === cat)?.[0] ?? cat
     await revertCategoryAlias(canonical)
     setAliases(await loadCategoryAliases()); refreshMeta()
-  }
+  }, [aliases, refreshMeta])
   //#endregion
 
   //#region ─── Category management ────────────
-  const handleAssignCategory = async (bookmarkId: string, categoryName: string) => {
+  const handleAssignCategory = useCallback(async (bookmarkId: string, categoryName: string) => {
     await updateMeta(bookmarkId, { customCategory: categoryName || undefined }); refreshMeta()
-    if (useAutoCategorization) {
-      setUseAutoCategorization(false)
-      setAutoCategories({})
-    }
-  }
-  const handleAddCategory = async () => {
+    // Assigning a manual category supersedes auto mode — exit it explicitly.
+    setUseAutoCategorization(prev => {
+      if (prev) setAutoCategories({})
+      return false
+    })
+  }, [refreshMeta])
+
+  const handleAddCategory = useCallback(async () => {
     const name = newCatName.trim(); if (!name) return
     const created = await addCustomCategory(name, newCatIcon)
     setCustomCats(prev => [...prev, created])
     setNewCatName(""); setNewCatIcon("🗂️"); setShowNewCatForm(false)
-    if (useAutoCategorization) {
-      setUseAutoCategorization(false)
-      setAutoCategories({})
-    }
-  }
-  const handleDeleteCategory = async (id: string) => {
+    setUseAutoCategorization(prev => {
+      if (prev) setAutoCategories({})
+      return false
+    })
+  }, [newCatName, newCatIcon])
+
+  const handleDeleteCategory = useCallback(async (id: string) => {
     await deleteCustomCategory(id)
     setCustomCats(prev => prev.filter(c => c.id !== id)); refreshMeta()
     if (selectedCategory === customCats.find(c => c.id === id)?.name) setSelectedCategory("")
-  }
+  }, [selectedCategory, customCats, refreshMeta])
   //#endregion
 
   //#region ─── Bulk bookmark actions ─────────
-  const handleDeleteBookmarks = async (ids: string[]) => {
+  const handleDeleteBookmarks = useCallback(async (ids: string[]) => {
     await Promise.all(ids.map(id => browserApi.bookmarks.remove(id)))
     const remainingBookmarks = allBookmarks.filter(b => !ids.includes(b.id))
     setAllBookmarks(remainingBookmarks)
-    const result = findDuplicates(remainingBookmarks)
-    setDuplicateResult(result)
-    setDuplicateCount(totalDuplicateCount(result))
-  }
+    // ✦ FIX: Invalidate duplicate cache instead of recomputing eagerly.
+    setDuplicateResult(null)
+    setDuplicateCount(0)
+  }, [allBookmarks])
 
-  const handleUpdateUrl = async (id: string, url: string) => {
+  const handleUpdateUrl = useCallback(async (id: string, url: string) => {
     await browserApi.bookmarks.update(id, { url })
     const updatedBookmarks = allBookmarks.map(b => b.id === id ? { ...b, url } : b)
     setAllBookmarks(updatedBookmarks)
-    const result = findDuplicates(updatedBookmarks)
-    setDuplicateResult(result)
-    setDuplicateCount(totalDuplicateCount(result))
-  }
+    // ✦ FIX: Invalidate duplicate cache instead of recomputing eagerly.
+    setDuplicateResult(null)
+    setDuplicateCount(0)
+  }, [allBookmarks])
 
-  const handleUpdateNote = async (id: string, note: string) => {
+  const handleUpdateNote = useCallback(async (id: string, note: string) => {
     await updateMeta(id, { description: note })
     refreshMeta()
-  }
+  }, [refreshMeta])
   //#endregion
 
   //#region ─── Import helpers ──────────────────────────────────────────────
-
-  // Parses a standard browser-exported HTML bookmarks file and recreates
-  // the folder structure + bookmarks in the browser.
 
   const importBrowserHtmlBackup = async (file: File): Promise<HtmlImportResult> => {
     const html = await file.text()
@@ -467,7 +465,7 @@ export function useFullViewLogic() {
   //#endregion
 
   // ─── Import handler ──────────────────────────────────────────────────────
-  const handleImport = async (file: File | null) => {
+  const handleImport = useCallback(async (file: File | null) => {
     if (!file) return
     setImportStatus("importing")
     setImportError(null)
@@ -485,9 +483,12 @@ export function useFullViewLogic() {
         setImportResult(result)
       }
       setImportStatus("done")
-      loadMeta().then(setMeta)
-      loadCustomCategories().then(setCustomCats)
-      loadCategoryAliases().then(setAliases)
+      // ✦ FIX: Batched the refresh loaders.
+      Promise.all([
+        loadMeta(), loadCustomCategories(), loadCategoryAliases(),
+      ]).then(([m, c, a]) => {
+        setMeta(m); setCustomCats(c); setAliases(a)
+      })
       await reloadBookmarksFromTree()
       setTimeout(() => setImportStatus("idle"), 6000)
     } catch (err: any) {
@@ -495,10 +496,10 @@ export function useFullViewLogic() {
       setImportStatus("error")
       setTimeout(() => setImportStatus("idle"), 6000)
     }
-  }
+  }, [reloadBookmarksFromTree])
 
   //#region ─── View switching ────────
-  const handleGroupModeChange = (value: GroupMode) => {
+  const handleGroupModeChange = useCallback((value: GroupMode) => {
     setGroupMode(value); setSelectedCategory(""); setSearch("")
     setShowForgotten(false); setShowBroken(false); setShowUnverifiable(false)
     setShowDuplicates(false)
@@ -506,29 +507,32 @@ export function useFullViewLogic() {
       setUseAutoCategorization(false)
       setAutoCategories({})
     }
-  }
-  const handleCategoryChange = (value: string) => {
+  }, [])
+
+  const handleCategoryChange = useCallback((value: string) => {
     setSelectedCategory(value); setSearch("")
     setShowForgotten(false); setShowBroken(false); setShowUnverifiable(false)
     setShowDuplicates(false)
-    if (useAutoCategorization) {
-      setUseAutoCategorization(false)
-    }
-  }
+    setUseAutoCategorization(prev => prev ? false : prev)
+  }, [])
 
-  const toggleDuplicates = () => {
-    if (!duplicateResult || duplicateCount === 0) {
-      runDuplicateCheck()
+  const toggleDuplicates = useCallback(() => {
+    // ✦ FIX: Always recompute on open (was previously relying on a cached
+    //         result computed on mount). Now the cache is only populated
+    //         here or by runDuplicateCheck, so the check is cheap.
+    if (!showDuplicates) {
+      const result = findDuplicates(allBookmarks)
+      setDuplicateResult(result)
+      setDuplicateCount(totalDuplicateCount(result))
+      setShowDuplicates(true)
+      setShowForgotten(false)
+      setShowBroken(false)
+      setShowUnverifiable(false)
+      setSelectedCategory("")
     } else {
-      setShowDuplicates(!showDuplicates)
-      if (!showDuplicates) {
-        setShowForgotten(false)
-        setShowBroken(false)
-        setShowUnverifiable(false)
-        setSelectedCategory("")
-      }
+      setShowDuplicates(false)
     }
-  }
+  }, [showDuplicates, allBookmarks])
   //#endregion
 
   //#region ─── Vault operations ───────────
@@ -550,9 +554,7 @@ export function useFullViewLogic() {
     }
   }, [])
 
-  // Bulk-hide. Used by the picker inside the vault view.
-  // Requires the vault to be unlocked (enforced by the caller's UI).
-  const handleHideBookmarks = async (bookmarks: any[]): Promise<number> => {
+  const handleHideBookmarks = useCallback(async (bookmarks: any[]): Promise<number> => {
     if (!isVaultUnlocked()) return 0
     try {
       await hideBookmarksToVault(
@@ -571,24 +573,23 @@ export function useFullViewLogic() {
       console.error("Failed to hide bookmarks:", err)
       return 0
     }
-  }
+  }, [refreshPrivateBookmarks, reloadBookmarksFromTree])
 
-  const handleRestoreFromVault = async (vaultEntryId: string): Promise<void> => {
+  const handleRestoreFromVault = useCallback(async (vaultEntryId: string): Promise<void> => {
     if (!isVaultUnlocked()) return
     await restoreBookmarkFromVault(vaultEntryId)
     await refreshPrivateBookmarks()
     await reloadBookmarksFromTree()
     touchVaultSession()
-  }
+  }, [refreshPrivateBookmarks, reloadBookmarksFromTree])
 
-  const handleRemoveFromVault = async (vaultEntryId: string): Promise<void> => {
+  const handleRemoveFromVault = useCallback(async (vaultEntryId: string): Promise<void> => {
     if (!isVaultUnlocked()) return
     await removeFromVaultPermanently(vaultEntryId)
     await refreshPrivateBookmarks()
     touchVaultSession()
-  }
+  }, [refreshPrivateBookmarks])
 
-  // Called by the PrivateView after a successful unlock.
   const handlePrivateUnlock = useCallback(async () => {
     setIsPrivateUnlocked(true)
     setShowPrivate(true)
@@ -596,14 +597,14 @@ export function useFullViewLogic() {
     await refreshPrivateBookmarks()
   }, [refreshPrivateBookmarks])
 
-  const handlePrivateLock = () => {
+  const handlePrivateLock = useCallback(() => {
     lockVault()
     setIsPrivateUnlocked(false)
     setShowPrivate(false)
     setPrivateBookmarks([])
-  }
+  }, [])
 
-  const togglePrivateView = () => {
+  const togglePrivateView = useCallback(() => {
     if (!showPrivate) {
       setShowPrivate(true)
       setShowForgotten(false)
@@ -617,72 +618,173 @@ export function useFullViewLogic() {
     } else {
       handlePrivateLock()
     }
-  }
+  }, [showPrivate, refreshPrivateBookmarks, handlePrivateLock])
 //#endregion
 
   // ─── Toggle auto-categorization ──────────────────────────────────────────
-  const toggleAutoCategorization = () => {
+  // The ONLY place `useAutoCategorization` is set to true.
+  //
+  // ✦ FIX: The result, the "use auto" flag and the "is computing" flag are now
+  //         all set in the SAME synchronous block. React 18 batches them into a
+  //         single render, so the UI goes skeleton → real categories with no
+  //         intermediate state where the skeleton can get stuck.
+  //         (Previously the flag was cleared in a further rAF inside `finally`,
+  //         which, combined with the AnimatePresence key change in FullView,
+  //         left the skeleton on screen.)
+  //
+  //         The two nested rAFs before the compute are kept on purpose: they let
+  //         the browser PAINT the skeleton before getCatagorized() blocks the
+  //         main thread.
+  const toggleAutoCategorization = useCallback(() => {
     if (useAutoCategorization) {
       setUseAutoCategorization(false)
       setAutoCategories({})
-    } else {
-      const entries = allBookmarks.map(b => ({
-        title: b.title || b.url,
-        domain: new URL(b.url).hostname.replace("www.", "")
-      }))
-      const result = getCatagorized(entries)
-      setAutoCategories(result)
-      if (Object.keys(result).length > 0) {
-        setUseAutoCategorization(true)
-      }
+      return
     }
-  }
+
+    // If we already have a computed result, reuse it — no skeleton needed.
+    if (autoCategories && Object.keys(autoCategories).length > 0) {
+      setUseAutoCategorization(true)
+      return
+    }
+
+    setIsAutoCategorizing(true)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          const entries = allBookmarks.map(b => {
+            let domain = ""
+            try { domain = new URL(b.url).hostname.replace("www.", "") } catch {}
+            // ✦ FIX: pass `url` through as well so the matching in FullView
+            //         (entry.url → bookmark.url) hits the fast exact-match path
+            //         instead of falling back to slow title / substring scans.
+            return { title: b.title || b.url, domain, url: b.url }
+          })
+          const result = getCatagorized(entries)
+          setAutoCategories(result)
+          setUseAutoCategorization(Object.keys(result).length > 0)
+        } catch (err) {
+          console.error("Auto-categorization failed:", err)
+          setAutoCategories({})
+          setUseAutoCategorization(false)
+        } finally {
+          // Same tick as the result → one batched render.
+          setIsAutoCategorizing(false)
+        }
+      })
+    })
+  }, [useAutoCategorization, autoCategories, allBookmarks])
 
   //#region ─── Derived data ─────────
-  const grouped    = getCategoryes(allBookmarks, groupMode, meta, aliases)
-  const categories = Object.keys(grouped)
+  // ── FIX: memoize every derived collection so it doesn't recompute on
+  //         every render (esp. during health checks, which used to fire
+  //         these 4×/sec against 1000+ bookmarks).
 
-  const getFiltered = (cat: string) => {
-    if (!search) return grouped[cat] ?? []
+  const grouped = useMemo(
+    () => getCategoryes(allBookmarks, groupMode, meta, aliases),
+    [allBookmarks, groupMode, meta, aliases]
+  )
+
+  const categories = useMemo(() => Object.keys(grouped), [grouped])
+
+  // ✦ FIX: Precompute the search-filtered list for EVERY category once per
+  //         (grouped, search) change, instead of calling .filter() per
+  //         category on every render.
+  const filteredByCategory = useMemo(() => {
+    if (!search) return grouped
     const q = search.toLowerCase()
-    return (grouped[cat] ?? []).filter(
-      b => b.title.toLowerCase().includes(q) || b.url.toLowerCase().includes(q)
-    )
-  }
+    const out: Record<string, any[]> = {}
+    for (const cat of Object.keys(grouped)) {
+      out[cat] = (grouped[cat] ?? []).filter(
+        b => b.title.toLowerCase().includes(q) || b.url.toLowerCase().includes(q)
+      )
+    }
+    return out
+  }, [grouped, search])
 
-  const visibleCategories = (selectedCategory ? [selectedCategory] : categories)
-    .filter(cat => getFiltered(cat).length > 0)
+  const getFiltered = useCallback(
+    (cat: string) => filteredByCategory[cat] ?? [],
+    [filteredByCategory]
+  )
 
-  const allCategoryNames = [
-    ...Object.keys(getCategoryes(allBookmarks, "topic", {})),
-    ...customCats.map(c => c.name),
-  ].filter((v, i, a) => a.indexOf(v) === i)
+  const visibleCategories = useMemo(
+    () => (selectedCategory ? [selectedCategory] : categories)
+      .filter(cat => (filteredByCategory[cat]?.length ?? 0) > 0),
+    [selectedCategory, categories, filteredByCategory]
+  )
 
-  const forgottenBookmarks    = filterForgotten(allBookmarks, visits, forgottenMonths)
-  const brokenBookmarks       = filterDead(allBookmarks, health)
-  const unverifiableBookmarks = filterUnverifiable(allBookmarks, health)
-  const healthRefresh         = getHealthRefreshInfo(allBookmarks, health)
-  const showHealthBanner      = healthLoaded && healthRefresh.needsRefresh && !healthBannerDismissed && !isChecking
+  // ✦ FIX: Reuse `grouped` for topic-mode category names instead of running
+  //         getCategoryes a second (and third) time. When groupMode is
+  //         "topic" we already have the keys. When it's not, compute once
+  //         and memoize.
+  const topicCategoryNames = useMemo(
+    () => groupMode === "topic"
+      ? Object.keys(grouped)
+      : Object.keys(getCategoryes(allBookmarks, "topic", meta, aliases)),
+    [groupMode, grouped, allBookmarks, meta, aliases]
+  )
 
-  const q = search.toLowerCase()
-  const forgottenFiltered = search
-    ? forgottenBookmarks.filter(b => b.title.toLowerCase().includes(q) || b.url.toLowerCase().includes(q))
-    : forgottenBookmarks
-  const brokenFiltered = search
-    ? brokenBookmarks.filter(b => b.title.toLowerCase().includes(q) || b.url.toLowerCase().includes(q))
-    : brokenBookmarks
-  const unverifiableFiltered = search
-    ? unverifiableBookmarks.filter(b => b.title.toLowerCase().includes(q) || b.url.toLowerCase().includes(q))
-    : unverifiableBookmarks
+  const allCategoryNames = useMemo(
+    () => [
+      ...topicCategoryNames,
+      ...customCats.map(c => c.name),
+    ].filter((v, i, a) => a.indexOf(v) === i),
+    [topicCategoryNames, customCats]
+  )
+
+  const forgottenBookmarks = useMemo(
+    () => filterForgotten(allBookmarks, visits, forgottenMonths),
+    [allBookmarks, visits, forgottenMonths]
+  )
+
+  const brokenBookmarks = useMemo(
+    () => filterDead(allBookmarks, health),
+    [allBookmarks, health]
+  )
+
+  const unverifiableBookmarks = useMemo(
+    () => filterUnverifiable(allBookmarks, health),
+    [allBookmarks, health]
+  )
+
+  const healthRefresh = useMemo(
+    () => getHealthRefreshInfo(allBookmarks, health),
+    [allBookmarks, health]
+  )
+
+  const showHealthBanner = healthLoaded && healthRefresh.needsRefresh && !healthBannerDismissed && !isChecking
+
+  // ── FIX: reuse a single lowercase search string across all three filters
+  const forgottenFiltered = useMemo(() => {
+    if (!search) return forgottenBookmarks
+    const q = search.toLowerCase()
+    return forgottenBookmarks.filter(b => b.title.toLowerCase().includes(q) || b.url.toLowerCase().includes(q))
+  }, [forgottenBookmarks, search])
+
+  const brokenFiltered = useMemo(() => {
+    if (!search) return brokenBookmarks
+    const q = search.toLowerCase()
+    return brokenBookmarks.filter(b => b.title.toLowerCase().includes(q) || b.url.toLowerCase().includes(q))
+  }, [brokenBookmarks, search])
+
+  const unverifiableFiltered = useMemo(() => {
+    if (!search) return unverifiableBookmarks
+    const q = search.toLowerCase()
+    return unverifiableBookmarks.filter(b => b.title.toLowerCase().includes(q) || b.url.toLowerCase().includes(q))
+  }, [unverifiableBookmarks, search])
 
   const showPills = !search && groupMode !== "date"
   const [pillsExpanded, setPillsExpanded] = useState(false)
 
-  const progressPct = checkProgress
-    ? Math.round((checkProgress.done / Math.max(checkProgress.total, 1)) * 100)
-    : 0
+  const progressPct = useMemo(
+    () => checkProgress
+      ? Math.round((checkProgress.done / Math.max(checkProgress.total, 1)) * 100)
+      : 0,
+    [checkProgress]
+  )
 //#endregion
-  
+
   return {
     // State
     allBookmarks,

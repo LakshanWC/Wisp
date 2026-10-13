@@ -1,26 +1,11 @@
 import { useState, useEffect } from "react"
-import browserApi  from "~scripts/storage";
-import type { BookmarkTreeNode } from "~scripts/storage";
-import type { BrowserWindow } from "~scripts/storage";
+import browserApi from "~scripts/storage"
+import type { BookmarkTreeNode } from "~scripts/storage"
+import type { BrowserWindow } from "~scripts/storage"
 import "styles/popup.css"
-import { ThemeProvider, useTheme } from "scripts/themeProvider"
-import { ThemeToggle } from "components/themeToggle"
+import { ThemeProvider } from "./scripts/themeProvider"
+import { ThemeToggle } from "./components/themeToggle"
 import "styles/themes.css"
-
-// ─── YoRHa design tokens ───────────────────────────────────────────────────────
-const YORHA = {
-  bg: "#e8e4d8",
-  bgPanel: "#ddd8c8",
-  ink: "#161511",
-  dim: "#8a8578",
-  dimmer: "#a8a396",
-  line: "#161511",
-  lineFaint: "rgba(22,21,17,0.18)",
-  rust: "#b8341f",
-  sage: "#4a5d4f",
-  amber: "#a3742f",
-  mono: "'JetBrains Mono', 'Courier New', monospace",
-}
 
 // ─── Tile definitions ─────────────────────────────────────────────────────────
 
@@ -51,6 +36,8 @@ const ALL_TILES: TileDef[] = [
 
 const DEFAULT_VISIBLE: TileId[] = ["total", "topDomain", "forgotten", "broken"]
 const STORAGE_KEY = "popup_tiles"
+
+type AccentClass = "" | "is-amber" | "is-rust" | "is-sage"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,15 +80,11 @@ function PopupContent() {
   const [editMode, setEditMode]         = useState(false)
   const [loaded, setLoaded]             = useState(false)
 
-  const { theme } = useTheme()
-  const isDark = theme === "dark" || theme === "high-contrast-dark"
-
   useEffect(() => {
     let cancelled = false
 
     async function load() {
       try {
-        // Cross-browser: promise-based on both Chrome & Firefox
         const [tree, result] = await Promise.all([
           browserApi.bookmarks.getTree(),
           browserApi.storage.local.get(["bookmark_health", "bookmark_visits", STORAGE_KEY]),
@@ -129,8 +112,6 @@ function PopupContent() {
       ? visibleTiles.filter(t => t !== id)
       : [...visibleTiles, id]
     setVisibleTiles(next)
-    //  Cross-browser (returns a promise — fire & forget is fine here,
-    //    but we swallow errors so a failed write doesn't crash the UI)
     browserApi.storage.local.set({ [STORAGE_KEY]: next }).catch(err => {
       console.error("[Wisp] Failed to persist tile prefs:", err)
     })
@@ -176,54 +157,49 @@ function PopupContent() {
     bookmarks.map(b => { try { return new URL(b.url!).hostname } catch { return "" } })
   ).size
 
-  const getTileContent = (id: TileId): { value: string; sub: string; color?: string } => {
+  const getTileContent = (id: TileId): { value: string; sub: string; accent: AccentClass } => {
     switch (id) {
       case "total":
-        return { value: total.toLocaleString(), sub: "saved bookmarks" }
+        return { value: total.toLocaleString(), sub: "saved bookmarks", accent: "" }
       case "topDomain":
         return topDomain
-          ? { value: topDomain.domain, sub: `${topDomain.count} bookmarks` }
-          : { value: "—", sub: "no data yet" }
+          ? { value: topDomain.domain, sub: `${topDomain.count} bookmarks`, accent: "" }
+          : { value: "—", sub: "no data yet", accent: "" }
       case "forgotten":
         return {
           value: forgotten.toString(),
           sub: "not opened in 6mo",
-          color: forgotten > 0 ? YORHA.amber : YORHA.sage,
+          accent: forgotten > 0 ? "is-amber" : "is-sage",
         }
       case "broken":
         return {
           value: broken > 0 || unverifiable > 0 ? `${broken} · ${unverifiable}` : "0",
           sub: broken > 0 || unverifiable > 0 ? "broken · unverifiable" : "all links OK",
-          color: broken > 0 ? YORHA.rust : unverifiable > 0 ? YORHA.amber : YORHA.sage,
+          accent: broken > 0 ? "is-rust" : unverifiable > 0 ? "is-amber" : "is-sage",
         }
       case "newest":
         return newest
-          ? { value: newest.title || "Untitled", sub: relativeTime(newest.dateAdded!) }
-          : { value: "—", sub: "no bookmarks yet" }
+          ? { value: newest.title || "Untitled", sub: relativeTime(newest.dateAdded!), accent: "" }
+          : { value: "—", sub: "no bookmarks yet", accent: "" }
       case "lastVisit":
         return lastVisited
-          ? { value: lastVisited.title || "Untitled", sub: relativeTime(lastVisited.time) }
-          : { value: "—", sub: "no visits recorded" }
+          ? { value: lastVisited.title || "Untitled", sub: relativeTime(lastVisited.time), accent: "" }
+          : { value: "—", sub: "no visits recorded", accent: "" }
       case "categories":
-        return { value: uniqueDomains.toString(), sub: "unique domains" }
+        return { value: uniqueDomains.toString(), sub: "unique domains", accent: "" }
     }
   }
 
-  // Cross-browser: uses browserApi.windows / tabs / extension helpers
   const openFullView = async () => {
     const optionsUrl = browserApi.runtime.getURL("options.html")
 
     try {
       const window: BrowserWindow = await browserApi.windows.getCurrent()
 
-      // Incognito check — if we're in incognito without permission, don't
-      // try to open in this window (Chrome will refuse); open a new tab in
-      // the current window context anyway, which is what the original did.
       let isAllowed = true
       try {
         isAllowed = await browserApi.extension.isAllowedIncognitoAccess()
       } catch {
-        // If the check fails, assume no incognito — safer default.
         isAllowed = false
       }
 
@@ -246,174 +222,60 @@ function PopupContent() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  const bgColor = isDark ? "#1a1a17" : YORHA.bg
-  const textColor = isDark ? "#e8e4d8" : YORHA.ink
-  const dimColor = isDark ? "#8a8578" : YORHA.dim
-  const dimmerColor = isDark ? "#6a6578" : YORHA.dimmer
-  const borderColor = isDark ? "rgba(232,228,216,0.15)" : YORHA.lineFaint
-  const cardBg = isDark ? "#242420" : YORHA.bg
-
   return (
-    <div style={{
-      width: 320,
-      backgroundColor: bgColor,
-      color: textColor,
-      fontFamily: YORHA.mono,
-      boxSizing: "border-box",
-      position: "relative",
-      overflow: "hidden",
-      transition: "background-color 0.3s, color 0.3s",
-    }}>
-      <div style={{
-        position: "absolute", inset: 0,
-        backgroundImage: `
-          repeating-linear-gradient(0deg, rgba(22,21,17,0.02) 0px, rgba(22,21,17,0.02) 1px, transparent 1px, transparent 3px)
-        `,
-        pointerEvents: "none",
-        opacity: isDark ? 0.3 : 1,
-      }} />
+    <div className="wisp-popup">
+      <div className="wisp-popup__scanlines" />
+      <div className="wisp-popup__corner wisp-popup__corner--tl" />
+      <div className="wisp-popup__corner wisp-popup__corner--tr" />
 
-      <div style={{
-        position: "absolute", top: 12, left: 12,
-        width: 16, height: 16,
-        borderTop: `1px solid ${borderColor}`,
-        borderLeft: `1px solid ${borderColor}`,
-        pointerEvents: "none",
-        opacity: 0.5,
-      }} />
-      <div style={{
-        position: "absolute", top: 12, right: 12,
-        width: 16, height: 16,
-        borderTop: `1px solid ${borderColor}`,
-        borderRight: `1px solid ${borderColor}`,
-        pointerEvents: "none",
-        opacity: 0.5,
-      }} />
-
-      <div style={{ padding: "20px 18px 18px", position: "relative" }}>
+      <div className="wisp-popup__body">
 
         {/* ── Header ── */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <div className="wisp-popup__head">
           <div>
-            <h1 style={{
-              fontSize: 22,
-              fontWeight: 700,
-              color: textColor,
-              margin: 0,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-              transition: "color 0.3s",
-            }}>
-              Wisp
-            </h1>
-            <p style={{
-              color: dimColor,
-              margin: "2px 0 0",
-              fontSize: 10,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              transition: "color 0.3s",
-            }}>
-              archive unit
-            </p>
+            <h1 className="wisp-popup__title">Wisp</h1>
+            <p className="wisp-popup__subtitle">archive unit</p>
           </div>
 
           <button
             onClick={() => setEditMode(e => !e)}
-            style={{
-              background: editMode ? bgColor : "transparent",
-              border: `1px solid ${editMode ? textColor : borderColor}`,
-              padding: "6px 12px",
-              color: editMode ? textColor : dimColor,
-              fontSize: 9,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              cursor: "pointer",
-              fontFamily: YORHA.mono,
-              transition: "all 0.15s",
-            }}
+            className={`wisp-popup__editbtn${editMode ? " is-active" : ""}`}
           >
             {editMode ? "Done" : "✎ Edit"}
           </button>
         </div>
 
         {/* ── Theme toggle row ── */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: isDark ? "#242420" : YORHA.bgPanel,
-          border: `1px solid ${borderColor}`,
-          padding: "6px 12px",
-          marginBottom: 12,
-          transition: "background 0.3s, border-color 0.3s",
-        }}>
-          <span style={{
-            fontSize: 9,
-            color: dimColor,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            fontWeight: 600,
-          }}>
-            Appearance
-          </span>
+        <div className="wisp-popup__appearance">
+          <span className="wisp-popup__appearance-label">Appearance</span>
           <ThemeToggle />
         </div>
 
         {/* ── Edit mode ── */}
         {editMode && (
-          <div style={{
-            background: isDark ? "#242420" : YORHA.bgPanel,
-            border: `1px solid ${borderColor}`,
-            padding: "12px 14px",
-            marginBottom: 14,
-            transition: "background 0.3s, border-color 0.3s",
-          }}>
-            <p style={{
-              margin: "0 0 10px",
-              fontSize: 9,
-              color: dimColor,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              fontWeight: 700,
-              transition: "color 0.3s",
-            }}>
-              Choose what to show
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div className="wisp-popup__editpanel">
+            <p className="wisp-popup__editpanel-title">Choose what to show</p>
+            <div className="wisp-popup__editpanel-list">
               {ALL_TILES.map(tile => {
                 const on = visibleTiles.includes(tile.id)
                 return (
                   <div
                     key={tile.id}
                     onClick={() => toggleTile(tile.id)}
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "6px 10px",
-                      cursor: "pointer",
-                      background: on ? bgColor : "transparent",
-                      border: `1px solid ${on ? textColor : "transparent"}`,
-                      transition: "all 0.15s",
-                    }}
+                    className={`wisp-popup__tile-toggle${on ? " is-on" : ""}`}
                   >
-                    <span style={{
-                      fontSize: 11,
-                      color: on ? textColor : dimColor,
-                      letterSpacing: "0.04em",
-                      transition: "color 0.3s",
-                    }}>
+                    <span className="wisp-popup__tile-toggle-label">
                       {tile.symbol} {tile.label.toUpperCase()}
                     </span>
-                    <div style={{
-                      width: 14, height: 14,
-                      flexShrink: 0,
-                      background: on ? textColor : "transparent",
-                      border: `1px solid ${on ? textColor : dimColor}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      transition: "all 0.15s",
-                    }}>
+                    <div className="wisp-popup__tile-check">
                       {on && (
                         <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                          <path d="M1.5 4L3 5.5L6.5 2" stroke={bgColor} strokeWidth="1.5"
-                            strokeLinecap="round" strokeLinejoin="round" />
+                          <path
+                            d="M1.5 4L3 5.5L6.5 2"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
                         </svg>
                       )}
                     </div>
@@ -426,56 +288,17 @@ function PopupContent() {
 
         {/* ── Stat tiles ── */}
         {!editMode && loaded && visibleTiles.length > 0 && (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: visibleTiles.length === 1 ? "1fr" : "1fr 1fr",
-            gap: 6,
-            marginBottom: 14,
-          }}>
+          <div className={`wisp-popup__tiles ${visibleTiles.length === 1 ? "cols-1" : "cols-2"}`}>
             {visibleTiles.map(id => {
               const def = ALL_TILES.find(t => t.id === id)!
-              const { value, sub, color } = getTileContent(id)
+              const { value, sub, accent } = getTileContent(id)
               return (
-                <div key={id} style={{
-                  background: cardBg,
-                  border: `1px solid ${borderColor}`,
-                  padding: "10px 12px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 2,
-                  minWidth: 0,
-                  transition: "background 0.3s, border-color 0.3s",
-                }}>
-                  <span style={{
-                    fontSize: 11,
-                    color: dimColor,
-                    letterSpacing: "0.04em",
-                  }}>
-                    {def.symbol}
-                  </span>
-                  <span style={{
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: color ?? textColor,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    letterSpacing: "0.02em",
-                    transition: "color 0.3s",
-                  }}>
+                <div key={id} className="wisp-popup__tile">
+                  <span className="wisp-popup__tile-symbol">{def.symbol}</span>
+                  <span className={`wisp-popup__tile-value${accent ? " " + accent : ""}`}>
                     {value}
                   </span>
-                  <span style={{
-                    fontSize: 9,
-                    color: dimmerColor,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    letterSpacing: "0.04em",
-                    transition: "color 0.3s",
-                  }}>
-                    {sub}
-                  </span>
+                  <span className="wisp-popup__tile-sub">{sub}</span>
                 </div>
               )
             })}
@@ -484,49 +307,15 @@ function PopupContent() {
 
         {/* Empty state */}
         {!editMode && loaded && visibleTiles.length === 0 && (
-          <div style={{
-            textAlign: "center",
-            padding: "16px 0 14px",
-            color: dimmerColor,
-            fontSize: 11,
-            letterSpacing: "0.04em",
-            transition: "color 0.3s",
-          }}>
+          <div className="wisp-popup__empty">
             No tiles selected — tap ✎ Edit to add some.
           </div>
         )}
 
-        <div style={{
-          height: 1,
-          background: borderColor,
-          marginBottom: 14,
-          transition: "background 0.3s",
-        }} />
+        <div className="wisp-popup__divider" />
 
         {/* ── Open button ── */}
-        <button
-          onClick={openFullView}
-          style={{
-            width: "100%",
-            background: textColor,
-            color: bgColor,
-            border: `1px solid ${textColor}`,
-            padding: "10px 0",
-            fontWeight: 700,
-            fontSize: 11,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            cursor: "pointer",
-            fontFamily: YORHA.mono,
-            transition: "all 0.15s",
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.opacity = "0.85"
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.opacity = "1"
-          }}
-        >
+        <button onClick={openFullView} className="wisp-popup__open">
           Open Wisp →
         </button>
 
