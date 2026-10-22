@@ -12,7 +12,7 @@ type TimelineViewProps = {
   groupMode: GroupMode;
   getCategoryIcon: (cat: string, mode: GroupMode) => string;
   theme: any,
-  colors: any 
+  colors?: any 
   onDeleteBookmarks: (ids: string[]) => void;
   onUpdateUrl: (id: string, url: string) => void;
   onUpdateNote: (id: string, note: string) => void;

@@ -2,12 +2,18 @@
   "name": "Wisp",
   "displayName": "Wisp",
   "version": "1.0.0",
-  "description": "Organize and search your bookmarks, check for dead links, and keep private ones safe in an encrypted vault.",
+  "description": "Organize and search your bookmarks, check for dead links, and keep private ones safe in an encrypted vault (AES-256-GCM, PBKDF2-SHA256) with password and recovery-key access.",
   "author": "Lamp Moth",
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",
-    "package": "plasmo package"
+    "package": "plasmo package",
+    "build:chrome": "plasmo build --target=chrome-mv3 --zip",
+    "build:edge": "plasmo build --target=edge-mv3 --zip",
+    "build:brave": "plasmo build --target=brave-mv3 --zip",
+    "build:opera": "plasmo build --target=opera-mv3 --zip",
+    "build:firefox": "plasmo build --target=firefox-mv2 --zip",
+    "build:all": "npm run build:chrome && npm run build:firefox"
   },
   "dependencies": {
     "framer-motion": "^12.42.2",
@@ -41,11 +47,13 @@
       "unlimitedStorage",
       "alarms"
     ],
-    "incognito": "split",
-    "browser_specific_settings": {
+  "browser_specific_settings": {
       "gecko": {
         "id": "wisp@lampmoth.extension",
-        "strict_min_version": "109.0"
+        "strict_min_version": "142.0",
+        "data_collection_permissions": {
+          "required": ["none"]
+        }
       }
     }
   }

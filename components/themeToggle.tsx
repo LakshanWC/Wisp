@@ -1,6 +1,7 @@
 // components/themeToggle.tsx
 import React from 'react'
 import { useTheme } from '../scripts/themeProvider'
+import browserApi from '~scripts/storage'
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
@@ -31,14 +32,14 @@ export function ThemeToggle() {
     e.stopPropagation()
     setTheme(targetTheme as any)
     document.documentElement.setAttribute('data-theme', targetTheme)
-    chrome.storage.local.set({ theme: targetTheme })
+    browserApi.storage.local.set({ theme: targetTheme })
   }
 
   const cycleTheme = () => {
     const next = themeConfigs[(currentIndex + 1) % themeConfigs.length]
     setTheme(next.id as any)
     document.documentElement.setAttribute('data-theme', next.id)
-    chrome.storage.local.set({ theme: next.id })
+    browserApi.storage.local.set({ theme: next.id })
   }
 
   return (

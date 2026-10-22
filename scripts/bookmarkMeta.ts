@@ -30,44 +30,6 @@ async function storageSet(key: string, value: unknown): Promise<void> {
 }
 //#endregion
 
-//TODO: TO-BE-REMOVED
-// function isExtensionContext(): boolean {
-//   return (
-//     typeof chrome !== "undefined" &&
-//     browserApi.storage != null &&
-//     browserApi.storage.local != null
-//   )
-// }
-
-// async function storageGet<T>(key: string, fallback: T): Promise<T> {
-//   if (isExtensionContext()) {
-//     return new Promise((resolve, reject) => {
-//       browserApi.storage.local.get(key, result => {
-//         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
-//         else resolve((result[key] as T) ?? fallback)
-//       })
-//     })
-//   }
-//   try {
-//     const raw = localStorage.getItem(key)
-//     return raw ? (JSON.parse(raw) as T) : fallback
-//   } catch {
-//     return fallback
-//   }
-// }
-
-// async function storageSet(key: string, value: unknown): Promise<void> {
-//   if (isExtensionContext()) {
-//     return new Promise((resolve, reject) => {
-//       browserApi.storage.local.set({ [key]: value }, () => {
-//         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message))
-//         else resolve()
-//       })
-//     })
-//   }
-//   localStorage.setItem(key, JSON.stringify(value))
-// }
-
 //#region ─── Bookmark meta ──────────
 
 export async function loadMeta(): Promise<MetaStore> {

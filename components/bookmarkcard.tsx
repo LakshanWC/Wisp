@@ -1,26 +1,6 @@
 import React, { useState, useEffect } from "react"
 import "styles/themes.css"
 import { loadFavicon } from "~scripts/faviconHelper"
-import { useTheme } from '../scripts/themeProvider'
-
-//#region ─── styleing design ────────
-function getThemeColors(theme: string) {
-  const isDark = theme === "dark" || theme === "high-contrast-dark"
-
-  return {
-    bg: isDark ? "#1a1a17" : "#e8e4d8",
-    bgPanel: isDark ? "#242420" : "#ddd8c8",
-    ink: isDark ? "#e8e4d8" : "#161511",
-    dim: isDark ? "#8a8578" : "#8a8578",
-    dimmer: isDark ? "#6a6578" : "#a8a396",
-    line: isDark ? "rgba(232,228,216,0.3)" : "#161511",
-    lineFaint: isDark ? "rgba(232,228,216,0.12)" : "rgba(22,21,17,0.18)",
-    rust: "#b8341f",
-    sage: "#4a5d4f",
-    amber: "#a3742f",
-    mono: "'JetBrains Mono', 'Courier New', monospace",
-  }
-}
 
 interface BookmarkCardProps {
   title: string
@@ -32,9 +12,8 @@ interface BookmarkCardProps {
   onTogglePrivate?: (e: React.MouseEvent) => void
   onClick?: () => void
 }
-//#endregion
 
-//#region  ───  SVG Icons ──────────
+//#region ─── SVG Icons ──────────────────────────────────────────────────────
 
 const LockIcon = ({ size = 14 }: { size?: number }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ pointerEvents: "none" }}>
@@ -57,24 +36,17 @@ const LinkIcon = ({ size = 12 }: { size?: number }) => (
   </svg>
 )
 
-const ArrowIcon = ({ size = 12, style }: { size?: number; style?: React.CSSProperties }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ pointerEvents: "none", ...style }}>
+const ArrowIcon = ({ size = 12 }: { size?: number }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ pointerEvents: "none" }}>
     <line x1="5" y1="12" x2="19" y2="12"></line>
     <polyline points="12 5 19 12 12 19"></polyline>
   </svg>
 )
 //#endregion
 
-//#region ─── Favicon ────────
-const FaviconFrame = ({
-  url,
-  hovered,
-  colors,
-}: {
-  url?: string
-  hovered: boolean
-  colors: ReturnType<typeof getThemeColors>
-}) => {
+//#region ─── Favicon ────────────────────────────────────────────────────────
+
+const FaviconFrame = ({ url }: { url?: string }) => {
   const [faviconDataUrl, setFaviconDataUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
@@ -83,23 +55,11 @@ const FaviconFrame = ({
     let isMounted = true
 
     const loadCachedFavicon = async () => {
-      if (!url) {
-        setLoading(false)
-        return
-      }
+      if (!url) { setLoading(false); return }
 
       let domain = ""
-      try {
-        domain = new URL(url).hostname
-      } catch {
-        setLoading(false)
-        return
-      }
-
-      if (!domain) {
-        setLoading(false)
-        return
-      }
+      try { domain = new URL(url).hostname } catch { setLoading(false); return }
+      if (!domain) { setLoading(false); return }
 
       try {
         const cachedDataUrl = await loadFavicon(domain)
@@ -122,30 +82,15 @@ const FaviconFrame = ({
     }
 
     loadCachedFavicon()
-
-    return () => {
-      isMounted = false
-    }
+    return () => { isMounted = false }
   }, [url])
 
   const showFallback = loading || failed || !faviconDataUrl
 
   return (
-    <div
-      style={{
-        width: "26px",
-        height: "26px",
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        border: `1px solid ${hovered ? colors.line : colors.lineFaint}`,
-        background: colors.bgPanel,
-        transition: "border-color 0.3s",
-      }}
-    >
+    <div className="wisp-favicon">
       {showFallback ? (
-        <span style={{ color: colors.dimmer, display: "flex", transition: "color 0.3s" }}>
+        <span className="wisp-favicon__fallback">
           <LinkIcon size={12} />
         </span>
       ) : (
@@ -154,10 +99,7 @@ const FaviconFrame = ({
           alt=""
           width={14}
           height={14}
-          onError={() => {
-            setFailed(true)
-            setFaviconDataUrl(null)
-          }}
+          onError={() => { setFailed(true); setFaviconDataUrl(null) }}
           style={{
             display: "block",
             imageRendering: "pixelated",
@@ -171,11 +113,12 @@ const FaviconFrame = ({
 }
 //#endregion
 
-function formatDate(timestamp){
-  return new Date(timestamp).toLocaleString();
+function formatDate(timestamp: string | number) {
+  return new Date(timestamp).toLocaleString()
 }
 
-//#region ---- BookmarkCard -----
+//#region ─── BookmarkCard ───────────────────────────────────────────────────
+
 export default function BookmarkCard({
   title,
   description = "No description",
@@ -186,286 +129,97 @@ export default function BookmarkCard({
   onTogglePrivate,
   onClick,
 }: BookmarkCardProps) {
-  const { theme } = useTheme()
-  const colors = getThemeColors(theme)
-  const isDark = theme === "dark" || theme === "high-contrast-dark"
-
-  const [hovered, setHovered] = useState(false)
-  const [btnHovered, setBtnHovered] = useState(false)
-  const [privateBtnHovered, setPrivateBtnHovered] = useState(false)
-
-  // Shorten URL for display
   const displayUrl = url ? url.replace(/^https?:\/\//, "").replace(/\/$/, "") : ""
 
-  // Use the provided color or fallback
-  const accentColor = isPrivate ? colors.ink : (color || colors.ink)
+  // Only per-card dynamic value left: the left accent bar color when a
+  // custom `color` is passed. We publish it as a CSS variable so the
+  // pseudo-element picks it up, and the theme system never touches it.
+  const accentStyle: React.CSSProperties =
+    !isPrivate && color
+      ? ({
+          ["--card-accent-idle" as any]: color,
+          ["--card-accent-hover" as any]: color,
+        } as React.CSSProperties)
+      : {}
 
   return (
     <div
+      className={`wisp-card${isPrivate ? " is-private" : ""}`}
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        backgroundColor: colors.bg,
-        padding: "20px",
-        border: `1px solid ${isPrivate ? colors.line : hovered ? colors.line : colors.lineFaint}`,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        minHeight: "160px",
-        cursor: "pointer",
-        position: "relative",
-        boxShadow: hovered
-          ? isDark
-            ? `4px 4px 0 rgba(0,0,0,0.4)`
-            : `4px 4px 0 ${isPrivate ? colors.ink : colors.dim}15`
-          : "none",
-        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-        fontFamily: colors.mono,
-        zIndex: hovered ? 2 : 1,
-        isolation: "isolate",
-      }}
+      style={accentStyle}
     >
-      {/* ── Corner accent (style) — DECORATIVE, must not eat clicks ── */}
-      <div style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        width: "2px",
-        height: "100%",
-        background: isPrivate ? colors.ink : hovered ? colors.dim : colors.lineFaint,
-        transition: "background 0.3s ease",
-        pointerEvents: "none",   // ← FIX
-        zIndex: 0,
-      }} />
-
-      {/* ── Top-left corner frame — DECORATIVE ── */}
-      <div style={{
-        position: "absolute",
-        top: "8px",
-        left: "8px",
-        width: "12px",
-        height: "12px",
-        borderTop: `1px solid ${hovered ? colors.line : colors.lineFaint}`,
-        borderLeft: `1px solid ${hovered ? colors.line : colors.lineFaint}`,
-        opacity: hovered ? 1 : 0.3,
-        transition: "all 0.3s ease",
-        pointerEvents: "none",
-        zIndex: 0,
-      }} />
-
-      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: "10px", pointerEvents: "none" }}>
-
-        {/* ── Header Row: Favicon + Title + Badge ─────────────────────────── */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", overflow: "hidden" }}>
-            <FaviconFrame url={url} hovered={hovered} colors={colors} />
-            <h3 style={{
-              margin: 0,
-              marginTop: "2px",
-              fontSize: "14px",
-              fontWeight: 700,
-              lineHeight: 1.4,
-              color: hovered ? colors.ink : colors.dim,
-              letterSpacing: "0.02em",
-              transition: "color 0.3s",
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-              textTransform: "uppercase",
-            }}>
-              {title}
-            </h3>
+      <div className="wisp-card__content">
+        {/* ── Header Row ─────────────────────────────────────────────────── */}
+        <div className="wisp-card__header">
+          <div className="wisp-card__header-left">
+            <FaviconFrame url={url} />
+            <h3 className="wisp-card__title">{title}</h3>
           </div>
 
-          {/* ── Private Badge ────────────────────────────────────────────────── */}
           {isPrivate && (
-            <div style={{
-              border: `1px solid ${colors.line}`,
-              padding: "4px 10px",
-              fontSize: "9px",
-              fontWeight: 700,
-              color: colors.ink,
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              flexShrink: 0,
-              background: colors.bgPanel,
-              transition: "background-color 0.3s, border-color 0.3s, color 0.3s",
-            }}>
+            <div className="wisp-card__badge">
               <LockIcon size={9} />
               <span>Private</span>
             </div>
           )}
         </div>
 
-        {/* ── Description ───────────────────────────────────────────────────── */}
+        {/* ── Description ─────────────────────────────────────────────────── */}
         {description && description !== "No description" && (
-          <p style={{
-            margin: 0,
-            fontSize: "12px",
-            color: colors.dimmer,
-            lineHeight: 1.5,
-            letterSpacing: "0.02em",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-            transition: "color 0.3s",
-          }}>
-            {description}
-          </p>
+          <p className="wisp-card__desc">{description}</p>
         )}
       </div>
 
-      {/* ── Footer Section ──────────────────────────────────────────────────── */}
-      {/* Re-enable pointer events here so buttons inside are clickable */}
-      <div style={{ marginTop: "auto", paddingTop: "16px", position: "relative", zIndex: 2, pointerEvents: "auto" }}>
-
-        {/* ── URL + Date Row ────────────────────────────────────────────────── */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: "14px",
-          gap: "12px",
-          pointerEvents: "none",
-        }}>
+      {/* ── Footer Section ──────────────────────────────────────────────── */}
+      <div className="wisp-card__footer">
+        {/* ── URL + Date Row ────────────────────────────────────────────── */}
+        <div className="wisp-card__meta">
           {url && (
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
-              <span style={{ color: colors.dimmer, display: "flex", transition: "color 0.3s" }}>
+            <div className="wisp-card__url-wrap">
+              <span className="wisp-card__icon">
                 <LinkIcon size={10} />
               </span>
-              <p style={{
-                fontSize: "10px",
-                color: hovered ? colors.dim : colors.dimmer,
-                margin: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                fontWeight: 500,
-                transition: "color 0.3s",
-                letterSpacing: "0.02em",
-              }}>
-                {displayUrl}
-              </p>
+              <p className="wisp-card__url">{displayUrl}</p>
             </div>
-            
           )}
-          {date && (
-            <p style={{
-              fontSize: "10px",
-              color: colors.dimmer,
-              margin: 0,
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-              fontWeight: 600,
-              letterSpacing: "0.04em",
-              transition: "color 0.3s",
-            }}>
-              {formatDate(date)}
-            </p>
-          )}
+          {date && <p className="wisp-card__date">{formatDate(date)}</p>}
         </div>
 
-        {/* ── Action Buttons Row ───────────────────────────────────────────── */}
-        {/* Explicit position + z-index so the buttons always win hit-testing */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          position: "relative",
-          zIndex: 3,
-          pointerEvents: "auto",
-        }}>
-          {/* ── Visit Button ────────────────────────────────────────────────── */}
+        {/* ── Action Buttons Row ────────────────────────────────────────── */}
+        <div className="wisp-card__actions">
           <button
             type="button"
-            onMouseEnter={() => setBtnHovered(true)}
-            onMouseLeave={() => setBtnHovered(false)}
+            className="wisp-btn wisp-btn--visit"
             onMouseDown={(e) => {
-                  if (e.button === 1) {
-                e.preventDefault()   // prevents auto-scroll cursor
+              if (e.button === 1) {
+                e.preventDefault()
                 e.stopPropagation()
-                if (url) {
-                  window.open(url, "_blank")
-                }
+                if (url) window.open(url, "_blank")
               }
             }}
             onClick={(e) => {
               e.stopPropagation()
               if (url) window.open(url, "_blank")
             }}
-            style={{
-              flex: 1,
-              padding: "8px 16px",
-              backgroundColor: btnHovered ? colors.ink : "transparent",
-              color: btnHovered ? colors.bg : colors.ink,
-              border: `1px solid ${btnHovered ? colors.ink : colors.line}`,
-              fontSize: "10px",
-              fontWeight: 700,
-              cursor: "pointer",
-              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-              fontFamily: colors.mono,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              position: "relative",
-              zIndex: 10,
-              pointerEvents: "auto",
-            }}
           >
             Visit Site
-            <ArrowIcon size={10} style={{
-              transform: btnHovered ? "translateX(2px)" : "translateX(0)",
-              transition: "transform 0.2s",
-            }} />
+            <span className="wisp-btn__arrow">
+              <ArrowIcon size={10} />
+            </span>
           </button>
 
-          {/* ── Private Toggle Button ──────────────────────────────────────── */}
           {onTogglePrivate && (
             <button
               type="button"
-              onMouseEnter={() => setPrivateBtnHovered(true)}
-              onMouseLeave={() => setPrivateBtnHovered(false)}
+              className={`wisp-btn wisp-btn--private${isPrivate ? " is-active" : ""}`}
               onClick={(e) => {
                 e.stopPropagation()
                 onTogglePrivate(e)
               }}
-              style={{
-                padding: "8px 14px",
-                backgroundColor: isPrivate
-                  ? colors.bgPanel
-                  : privateBtnHovered
-                    ? colors.bgPanel
-                    : "transparent",
-                color: isPrivate ? colors.ink : colors.dimmer,
-                border: `1px solid ${isPrivate ? colors.line : privateBtnHovered ? colors.line : colors.lineFaint}`,
-                fontSize: "9px",
-                fontWeight: 700,
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-                fontFamily: colors.mono,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "5px",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                position: "relative",
-                zIndex: 10,
-                pointerEvents: "auto",
-              }}
               title={isPrivate ? "Remove from private" : "Hide in private view"}
             >
               {isPrivate ? <LockIcon size={11} /> : <UnlockIcon size={11} />}
-              <span style={{ pointerEvents: "none" }}>{isPrivate ? "Private" : "Hide"}</span>
+              <span>{isPrivate ? "Private" : "Hide"}</span>
             </button>
           )}
         </div>
