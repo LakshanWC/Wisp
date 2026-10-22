@@ -46,17 +46,6 @@ export async function clearHealth(): Promise<void> {
 //#endregion
 
 // ─── Single URL check ────────────────────────────────────────────────────────
-//
-// Strategy:
-//   1. Try GET with no-cors — an opaque response means the server responded → "ok"
-//   2. A TypeError (network failure, DNS failure, etc.) → "dead"
-//   3. An AbortError (timeout) → "unverifiable": the server didn't respond in
-//      time, which is typical of Cloudflare/bot-protection challenges that hang
-//      rather than fail. These sites may still be perfectly accessible in a
-//      real browser.
-//
-// Note: HEAD is intentionally avoided — many servers (nginx defaults, Cloudflare)
-// block HEAD requests while allowing GET.
 
 //#region ─── checkUrl ───
 export async function checkUrl(url: string): Promise<HealthRecord> {
