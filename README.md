@@ -187,6 +187,3 @@ This project is licensed under the MIT License — see the `LICENSE` file for de
 ## Summary
 
 Wisp is a feature-focused browser extension that treats bookmark management as a *maintenance* problem, not just a *storage* problem. It cleans up duplicates, monitors dead links, surfaces forgotten bookmarks, protects private entries with real AES-GCM encryption, and makes large collections navigable — while staying fast, cross-browser, and pleasant to use.
-
-
-Good context — that's an important detail worth getting right in the README, because it explains *why* the `http/https` host permissions don't cause downloads or side effects. Here's an updated Permissions section that reflects the actual `HEAD` + `no-cors` behavior in `bookmarkHealth.ts`:
