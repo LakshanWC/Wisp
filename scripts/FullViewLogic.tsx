@@ -35,7 +35,7 @@ import {
   type PrivateBookmark,
 } from '../scripts/bookmarkPrivacy'
 import { getCatagorized } from "~scripts/catagorizeHelper"
-import browserApi from "./storage"
+import browserApi, {type BookmarkTreeNode } from "./storage"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -134,36 +134,35 @@ export function useFullViewLogic() {
 
 //#region ─── Load bookmarks from the real tree ────────────────
   const reloadBookmarksFromTree = useCallback(() => {
-    return new Promise<any[]>(resolve => {
-      chrome.bookmarks.getTree(tree => {
-        const flatten = (nodes: chrome.bookmarks.BookmarkTreeNode[]): any[] => {
-          let result: any[] = []
-          for (const node of nodes) {
-            if (node.url) result.push({
-              id: node.id,
-              title: node.title,
-              url: node.url,
-              parentId: node.parentId,
-              date: node.dateAdded
-            })
-            if (node.children) result.push(...flatten(node.children))
-          }
-          return result
+    return browserApi.bookmarks.getTree().then(tree => {
+      const flatten = (nodes: BookmarkTreeNode[]): any[] => {
+        let result: any[] = []
+        for (const node of nodes) {
+          if (node.url) result.push({
+            id: node.id,
+            title: node.title,
+            url: node.url,
+            parentId: node.parentId,
+            date: node.dateAdded
+          })
+          if (node.children) result.push(...flatten(node.children))
         }
-        const bookmarks = flatten(tree)
-        setAllBookmarks(bookmarks)
+        return result
+      }
+      const bookmarks = flatten(tree)
+      setAllBookmarks(bookmarks)
 
-        // ✦ FIX: Removed eager findDuplicates() call. It's O(n²)-ish and was
-        //         running synchronously on mount before paint. Duplicates are
-        //         now computed lazily in toggleDuplicates / runDuplicateCheck.
-        //         Also invalidate any stale cached result here.
-        setDuplicateResult(null)
-        setDuplicateCount(0)
+      // ✦ FIX: Removed eager findDuplicates() call. It's O(n²)-ish and was
+      //         running synchronously on mount before paint. Duplicates are
+      //         now computed lazily in toggleDuplicates / runDuplicateCheck.
+      //         Also invalidate any stale cached result here.
+      setDuplicateResult(null)
+      setDuplicateCount(0)
 
-        resolve(bookmarks)
-      })
+      return bookmarks
     })
   }, [])
+  //#endregion
 
   useEffect(() => {
     reloadBookmarksFromTree()

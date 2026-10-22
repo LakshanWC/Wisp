@@ -9,7 +9,7 @@
       "chrome": "null",
       "edge": "null"
     },
-    "minSupportedVersion": "2.5.0",
+    "minSupportedVersion": "1.0.0",
     "downloadUrls": {
       "firefox": "https://example.com/",
       "chrome": "https://example.com/",
